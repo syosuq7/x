@@ -1,0 +1,2460 @@
+-- =========================================================================
+-- W7s Blackhole Ultimate — OBSIDIAN PORT (V40)
+-- UI: Obsidian + ThemeManager + SaveManager
+-- Core: unchanged logic, comments translated to English.
+-- =========================================================================
+
+-- ============================================================
+-- 1. OBSIDIAN + ADDONS
+-- ============================================================
+local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+local Library      = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+local SaveManager  = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+
+-- ============================================================
+-- 2. SERVICES
+-- ============================================================
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService      = game:GetService("HttpService")
+local TweenService     = game:GetService("TweenService")
+local SoundService     = game:GetService("SoundService")
+local Debris           = game:GetService("Debris")
+local StarterGui       = game:GetService("StarterGui")
+local TextChatService  = game:GetService("TextChatService")
+local LocalPlayer      = Players.LocalPlayer
+
+-- ============================================================
+-- 3. GLOBAL STATE
+-- ============================================================
+local S = {}
+if getgenv().W7sConnections then
+    for _, c in ipairs(getgenv().W7sConnections) do pcall(function() c:Disconnect() end) end
+    getgenv().W7sConnections = nil
+end
+if getgenv().W7sEngineLoaded then
+    pcall(function() getgenv().W7sEngineLoaded:Destroy() end)
+    getgenv().W7sEngineLoaded = nil
+end
+S.Connections = {}
+getgenv().W7sConnections = S.Connections
+local function track(c) if c then table.insert(S.Connections, c) end return c end
+S.disconnectAll = function()
+    for _, c in ipairs(S.Connections) do pcall(function() c:Disconnect() end) end
+    S.Connections = {}
+    getgenv().W7sConnections = nil
+end
+
+S.ConfigFileName = "W7s_Config.json"
+S.EngineActive    = false
+S.CurrentFormation = 1
+S.FormationNames = {
+    [1]="CLASSIC RING",[2]="CYCLONE TORNADO",[3]="SPHERICAL DOME",[4]="SINGULARITY BLACKHOLE",
+    [5]="PARAMETRIC HEART",[6]="4 SATELLITE ORBS",[7]="SATURN RING",[8]="SHIELD WALL",
+    [9]="INFINITY LOOP",[10]="PENTAGRAM STAR",[11]="GUDODAMA NARUTO",[12]="GALAXY SPIRAL",
+    [13]="ANGEL CROWN HALO",[14]="DOUBLE DNA HELIX",[15]="SUSANOO WINGS",[16]="RAIJIN RING",
+    [17]="ATOMIC GYROSCOPE",[18]="SACRED LOTUS",[19]="PRISMATIC PYRAMID",[20]="CYBER TESSERACT",
+    [21]="PERFECT SUSANOO",[22]="RINNEGAN MOON",[23]="ODAMA RASENGAN",[24]="GATE OF BABYLON",
+    [25]="MALEVOLENT SHRINE",[26]="SENBONZAKURA",[27]="CHIDORI AURA",[28]="JOJO STAND"
+}
+
+S.OwnershipRadius=200 S.TractorBeamDepth=350 S.PartQuota=250 S.MaxPartSize=60 S.MaxPartSpeed=300
+S.OrbitRadius=16 S.OrbitSpeed=4 S.OrbitOffsetX=0 S.OrbitHeight=0 S.OrbitOffsetZ=0
+S.RotationX=0 S.RotationY=0 S.RotationZ=0 S.SatelliteDist=8.5 S.PullStrength=18
+S.LethalTorque=true S.AntiNDSDamage=true S.WhitelistFriends=true S.AutoReclaimRound=true S.AntiSitEnabled=true
+S.HarvesterSwarmEnabled=true S.HarvesterDroneCount=10
+S.AntiStealEnabled=true S.AntiStealSweep=8 S.AntiStealPokes=2 S.AntiStealSample=12 S.ClaimBoost=1.6 S.MinAirGap=12
+S.recaptureCount=0 S.lostEventCount=0 S.harvesterDroneIdx=1 S.reclaimSampleIdx=1
+S.stolenList={} S.stolenSet={} S.stolenIdx=1 S.pendingConfigData=nil S.configWriteQueued=false
+S.ClaimSweep=60 S.GhostScanEnabled=true S.GhostScanInterval=4 S.GhostScanBatch=300
+S.ghostSnapshot={} S.ghostIdx=1 S.ghostScanTime=0 S.pendingIdx=1 S.pendingKeys={}
+S.SelfImmunityPerFrame=12 S.immunityUsedThisFrame=0
+S.AnimReplEnabled=true S.AnimHoverId=0 S.AnimDiveId=0 S.AnimSlashId=0 S.AnimPalmId=0
+S.AnimPurpleId=0 S.AnimTauntId=0 S.tauntUntil=0 S.animTracks={} S.animFailedId={} S.animCurrentSlot=nil
+S.ChatAnnounceEnabled=false S.ChatAnnounceCooldown=6 S.lastAnnounceTick=0 S.SfxEnabled=true
+S.WallPierceDist=16 S.WallPierceTeleport=true S.PartCollideEnabled=false S.FlingGuardRadius=12 S.JutsuSpin=150
+S.AntiFlingEnabled=true S.FlingMaxSpeed=320 S.FlingSpikeDelta=120 S.FlingMaxAngular=50
+S.lastCharSpeed=0 S.flingEvents=0 S.FlingCollideMaxSpeed=150 S.FlingMaxJump=32
+S.lastSafeCharPos=nil S.lastFlingToast=0 S.AntiLostEnabled=true S.ReturnDistance=260 S.returnedCount=0
+S.UiScale=1 S.lastClaimSfxTick=0 S.WeatherUmbrellaEnabled=true
+S.AutoQualityEnabled=true S.perfPressure=0 S.renderSkipParity=0 S.frameCounter=0 S.hudFps=60
+S.fpsAccum=0 S.fpsFrames=0 S.hudUpdateAccum=0 S.lastScaleCheck=0 S.OwnershipCheckPerFrame=40 S.demoteIdx=1
+S.ShowcaseActive=false S.ShowcaseInterval=8 S.lastShowcaseTick=0
+S.AnimSets = {
+    R6  = { Idle=180435571, Walk=180426354, Fall=180436148, Sit=178130996,
+            Tool=182393478, Wave=128777973, Point=128853357, Dance=182435998,
+            Dance2=182436842, Dance3=182436935, Cheer=129423030 },
+    R15 = { Idle=507766388, Walk=507777826, Fall=507767968, Sit=178130996,
+            Tool=507766388, Wave=507770239, Point=507770453, Dance=507771019,
+            Dance2=507770677, Dance3=507770818, Cheer=507770677 }
+}
+S.NativeFlyActive=false S.NativeFlySpeed=70 S.FlyAltitudeY=nil S.AnimeGodAnimEnabled=true
+S.MoveUp=false S.MoveDown=false
+S.DivinePalmMode=false S.HandScale=30 S.PalmActive=false S.PalmPhase=0 S.PalmStartTime=0 S.PalmTargetRoot=nil
+S.StagingAttackEnabled=true S.GojoModeEnabled=false S.BladeSlashMode=false S.BladeLength=35
+S.SlashActive=false S.SlashStartTime=0 S.SlashPhase=0
+S.TargetMode=1
+S.TargetModeNames={[1]="SINGLE TARGET",[2]="MULTI-LOCK (MAX 3)",[3]="RANDOM CHAOS",[4]="SUPER LOCK (LOOP)"}
+S.SelectedTargetPlayer=nil S.MultiLockedPlayers={} S.RandomTargetCount=10 S.AutoRandomScan=true
+S.lastAutoRandomTick=0 S.CurrentRandomTargets={} S.activeBillboards={}
+S.LaunchAmmoCount=3 S.LaunchSpeed=180 S.StagingDistance=6 S.RecallThreshold=50
+S.AutoAmplifyTorque=true S.PartNoclipAttack=true
+S.SuperLockActive=false S.SuperLockTarget=nil
+S.CenterMode=1 S.CenterTargetPlayer=nil S.CenterTargetName="" S.CenterFollowSpeed=7
+S.CenterAutoChase=true S.CenterChaseDist=80 S.CenterChaseStop=30
+S.CenterBlameAnnounce=true S.CenterOrbitCollide=false S.centerCF=nil
+S.centerPlayerBtns={} S.centerListSignature="" S.lastCenterHudTick=0 S.lastCenterListTick=0
+S.centerChasing=false S.lastChaseTick=0
+S.HollowPurpleActive=false S.HollowPurpleState=0 S.HollowPurpleStart=0
+S.HollowPurpleDir=Vector3.zero S.HollowPurplePos=Vector3.zero
+S.isPlayerDead=false S.deathPosition=Vector3.zero S.frozenPartPositions=setmetatable({},{__mode="k"})
+S.pendingCandidateParts=setmetatable({},{__mode="k"})
+S.verifiedOwnedParts={} S.activeHomingParts=setmetatable({},{__mode="k"})
+S.verifiedSet={} S.sensorState={} S.watchedChars=setmetatable({},{__mode="k"})
+S.humanoidStatesDisabled=setmetatable({},{__mode="k"})
+S.lastChildAddedScan=0 S.activeConstraints={} S.orbitAngle=0 S.lastScanTime=0
+
+S.WeatherRoofPart = Instance.new("Part")
+S.WeatherRoofPart.Name="W7s_SkyUmbrella" S.WeatherRoofPart.Size=Vector3.new(14,0.4,14)
+S.WeatherRoofPart.Transparency=1 S.WeatherRoofPart.CanCollide=false S.WeatherRoofPart.CanTouch=false
+S.WeatherRoofPart.CanQuery=true S.WeatherRoofPart.CastShadow=false S.WeatherRoofPart.Anchored=true
+S.WeatherRoofPart.CFrame=CFrame.new(0,-500,0)
+pcall(function() S.WeatherRoofPart.Parent=workspace end)
+
+S.currentBoostRadius=nil S.escalatedRadius=nil
+S.FarGrabEnabled=true S.FarGrabRadius=450 S.FarScanInterval=2.5 S.lastFarScanTime=0
+S.FarGrabTetherDist=110 S.FarGrabTopSpeed=260 S.farGrabbedParts=setmetatable({},{__mode="k"})
+S.SimRadDominate=true S.lastDominateTick=0 S.SimRadMin=900 S.SimRadMax=4000 S.simRadReadback=nil
+S.NeckGuardEnabled=true S.RescueEnabled=true S.RescueMax=5 S.rescueCount=0
+S.lastHealth=nil S.lastRescueTick=0 S.lastHealthDropInfo=nil S.voidFloorY=nil
+S.VoidGuardEnabled=true S.voidSaves=0 S.lastVoidToast=0 S.HeadGuardRadius=14
+S.headPart=nil S.neckTemplate=nil S.neckChar=nil S.deathCauses={} S.lastDeathInfo=nil
+
+-- ============================================================
+-- 4. UTILITIES
+-- ============================================================
+S.scanRadius = function()
+    local base = S.OwnershipRadius or 200
+    if S.FarGrabEnabled then local far = S.FarGrabRadius or 450; if far > base then return far end end
+    return base
+end
+S.lostReturnDist = function()
+    local d = S.ReturnDistance or 260
+    if S.FarGrabEnabled then local w = (S.scanRadius() or 0) + 100; if w > d then d = w end end
+    return d
+end
+S.farDrag = function(part, cp, tp, ds)
+    local dir = tp - cp
+    if dir.Magnitude > 0.05 then dir = dir.Unit else dir = Vector3.zero end
+    local fs = math.min(S.FarGrabTopSpeed or 260, ds * 2.2)
+    if fs < 60 then fs = 60 end
+    part.CanCollide = false
+    part.AssemblyLinearVelocity = dir * fs
+end
+S.boostSimRadius = function(override)
+    local base = math.max(S.OwnershipRadius or 200, 10)
+    local want = override or (base * math.clamp(S.ClaimBoost or 1.6, 1, 5))
+    if (not override) and S.escalatedRadius then want = math.max(want, S.escalatedRadius) end
+    local cap = S.SimRadMax or 4000
+    if not override then
+        if S.SimRadMin and want < S.SimRadMin then want = S.SimRadMin end
+        if S.scanRadius and want < S.scanRadius() then want = S.scanRadius() end
+    end
+    if want > cap then want = cap end
+    if want < 10 then want = 10 end
+    S.currentBoostRadius = want
+    pcall(function() LocalPlayer.MaximumSimulationRadius = cap end)
+    pcall(function() sethiddenproperty(LocalPlayer, "MaximumSimulationRadius", cap) end)
+    pcall(function() LocalPlayer.SimulationRadius = want end)
+    pcall(function() sethiddenproperty(LocalPlayer, "SimulationRadius", want) end)
+    local got = nil
+    pcall(function() got = tonumber(LocalPlayer.SimulationRadius) end)
+    S.simRadReadback = got
+    return want
+end
+S.boostSimRadius()
+S.dominateSimRadius = function()
+    if not S.SimRadDominate or not S.EngineActive then return end
+    if tick() - (S.lastDominateTick or 0) < 0.5 then return end
+    S.lastDominateTick = tick()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer then
+            local skip = false
+            if S.WhitelistFriends then pcall(function() skip = LocalPlayer:IsFriendsWith(plr.UserId) end) end
+            if not skip then
+                pcall(function() plr.MaximumSimulationRadius = 0 end)
+                pcall(function() sethiddenproperty(plr, "SimulationRadius", 0) end)
+            end
+        end
+    end
+end
+S.voidGuardY = function()
+    if not S.voidFloorY then
+        local fh = nil
+        pcall(function() fh = tonumber(workspace.FallenPartsDestroyHeight) end)
+        if not fh then fh = -500 end
+        S.voidFloorY = fh + 40
+    end
+    return S.voidFloorY
+end
+
+track(RunService.Stepped:Connect(function()
+    pcall(function() if settings().Physics.AllowSleep ~= false then settings().Physics.AllowSleep = false end end)
+    S.boostSimRadius()
+    S.dominateSimRadius()
+    if setsimulationradius then
+        pcall(function() setsimulationradius(S.currentBoostRadius or (S.OwnershipRadius * S.ClaimBoost)) end)
+    end
+end))
+
+S.stuckPending=0 S.stuckSince=nil S.escalateStage=0 S.lastEscalateTick=0
+S.checkStuckOwnership = function()
+    if not S.EngineActive then return end
+    local p = 0
+    for _ in pairs(S.pendingCandidateParts) do p = p + 1 end
+    S.stuckPending = p
+    if #S.verifiedOwnedParts == 0 and p > 0 then
+        S.stuckSince = S.stuckSince or tick()
+        if (tick() - S.stuckSince) > 4 and (S.escalateStage or 0) < 2 and (tick() - (S.lastEscalateTick or 0)) > 6 then
+            S.escalateStage = (S.escalateStage or 0) + 1
+            S.lastEscalateTick = tick()
+            if S.escalateStage == 1 then
+                S.escalatedRadius = math.max((S.OwnershipRadius or 200) * 4, 1500)
+            else
+                S.escalatedRadius = math.max((S.OwnershipRadius or 200) * 20, 12000)
+            end
+            S.boostSimRadius()
+            Library:Notify(string.format("%d parts pending, ownership not dropping. SimRadius auto-raised to %d (stage %d/2)",
+                p, math.floor(S.escalatedRadius), S.escalateStage), 5)
+        end
+    elseif #S.verifiedOwnedParts > 0 then
+        S.escalateStage = 0 S.stuckSince = nil
+    end
+end
+
+-- ============================================================
+-- 5. ANIM / CHAT / SFX
+-- ============================================================
+S.getHumanoidAndAnimator = function(char)
+    if not char then return nil, nil end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local animator = hum and hum:FindFirstChildOfClass("Animator")
+    return hum, animator
+end
+S.stopAnimSlot = function(slot)
+    local t = S.animTracks[slot]
+    if t and t ~= false then pcall(function() t:Stop(0.15) end) end
+    if S.animCurrentSlot == slot then S.animCurrentSlot = nil end
+end
+S.stopAllAnimTracks = function()
+    for slot in pairs(S.animTracks) do
+        local tr = S.animTracks[slot]
+        if tr and tr ~= false then pcall(function() tr:Stop(0.15) end) end
+    end
+    S.animCurrentSlot = nil
+end
+S.resolveAnimId = function(o, rig, key)
+    if o and o > 0 then return o end
+    local set = S.AnimSets[rig] or S.AnimSets.R6
+    return set[key] or set.Idle
+end
+S.playAnimSlot = function(slot, assetId, force)
+    if not S.AnimReplEnabled or not assetId or assetId <= 0 then return end
+    if S.animCurrentSlot == slot and not force then return end
+    local tr = S.animTracks[slot]
+    if tr == false then
+        if S.animFailedId[slot] == assetId then return end
+        S.animTracks[slot] = nil tr = nil
+    end
+    if not tr then
+        local _, an = S.getHumanoidAndAnimator(LocalPlayer.Character)
+        if not an then return end
+        local anim = Instance.new("Animation")
+        anim.AnimationId = "rbxassetid://" .. tostring(assetId)
+        local ok, loaded = pcall(function() return an:LoadAnimation(anim) end)
+        anim:Destroy()
+        if not (ok and loaded and typeof(loaded) == "Instance") then
+            S.animTracks[slot] = false S.animFailedId[slot] = assetId return
+        end
+        tr = loaded
+        tr.Priority = Enum.AnimationPriority.Action
+        tr.Looped = true
+        S.animTracks[slot] = tr S.animFailedId[slot] = nil
+    end
+    if S.animCurrentSlot and S.animCurrentSlot ~= slot then
+        local prev = S.animTracks[S.animCurrentSlot]
+        if prev and prev ~= false then pcall(function() prev:Stop(0.15) end) end
+    end
+    S.animCurrentSlot = slot
+    pcall(function() tr.Looped = true tr:Play(0.15) end)
+end
+S.updateAnimState = function()
+    if not S.AnimReplEnabled then if S.animCurrentSlot then S.stopAllAnimTracks() end return end
+    local hum, an = S.getHumanoidAndAnimator(LocalPlayer.Character)
+    if not hum or not an or S.isPlayerDead then if S.animCurrentSlot then S.stopAllAnimTracks() end return end
+    local rig = (hum.RigType == Enum.HumanoidRigType.R15) and "R15" or "R6"
+    if tick() < S.tauntUntil then
+        S.playAnimSlot("taunt", S.resolveAnimId(S.AnimTauntId, rig, "Dance"))
+    elseif S.PalmActive then
+        S.playAnimSlot("palm", S.resolveAnimId(S.AnimPalmId, rig, "Cheer"))
+    elseif S.SlashActive then
+        S.playAnimSlot("slash", S.resolveAnimId(S.AnimSlashId, rig, "Dance2"))
+    elseif S.HollowPurpleActive then
+        S.playAnimSlot("purple", S.resolveAnimId(S.AnimPurpleId, rig, "Point"))
+    elseif S.NativeFlyActive then
+        if hum.MoveDirection.Magnitude > 0.05 then
+            S.playAnimSlot("dive", S.resolveAnimId(S.AnimDiveId, rig, "Fall"))
+        else
+            S.playAnimSlot("hover", S.resolveAnimId(S.AnimHoverId, rig, "Idle"))
+        end
+    elseif S.ShowcaseActive then
+        S.playAnimSlot("showcase", S.resolveAnimId(S.AnimTauntId, rig, "Dance"))
+    elseif S.animCurrentSlot then S.stopAllAnimTracks() end
+end
+S.announceToChat = function(text, bypass)
+    if not S.ChatAnnounceEnabled or not text then return end
+    local now = tick()
+    if not bypass and (now - S.lastAnnounceTick) < math.max(3, S.ChatAnnounceCooldown) then return end
+    S.lastAnnounceTick = now
+    local sent = false
+    pcall(function()
+        if tostring(TextChatService.ChatVersion) ~= "Enum.ChatVersion.LegacyChatService" then
+            local chs = TextChatService:FindFirstChild("TextChannels")
+            local ch = chs and chs:FindFirstChild("RBXGeneral")
+            if not ch and chs then
+                for _, c in ipairs(chs:GetChildren()) do if c:IsA("TextChannel") then ch = c break end end
+            end
+            if ch then ch:SendAsync(text) sent = true end
+        end
+    end)
+    if not sent then
+        pcall(function()
+            StarterGui:SetCore("ChatMakeSystemMessage", {Text=text, Color=Color3.fromRGB(200,120,255)})
+        end)
+    end
+end
+S.playSfx = function(file, vol, pitch)
+    if not S.SfxEnabled or not file then return end
+    pcall(function()
+        local s = Instance.new("Sound")
+        s.SoundId = file s.Volume = vol or 0.5 s.PlaybackSpeed = pitch or 1
+        s.Parent = SoundService s:Play()
+        Debris:AddItem(s, 4)
+    end)
+end
+
+-- ============================================================
+-- 6. BILLBOARDS
+-- ============================================================
+S.clearBillboards = function()
+    for _, b in ipairs(S.activeBillboards) do if b and b.Parent then b:Destroy() end end
+    S.activeBillboards = {}
+end
+S.createTargetBillboard = function(tc, text)
+    local head = tc:FindFirstChild("Head") or tc:FindFirstChild("HumanoidRootPart")
+    if not head or head:FindFirstChild("W7sMarkerGui") then return end
+    local bbg = Instance.new("BillboardGui")
+    bbg.Name="W7sMarkerGui" bbg.Adornee=head bbg.Size=UDim2.new(5.5,0,1.2,0)
+    bbg.StudsOffset=Vector3.new(0,2.2,0) bbg.AlwaysOnTop=true bbg.MaxDistance=180 bbg.Parent=head
+    local fr = Instance.new("Frame", bbg)
+    fr.Size=UDim2.new(1,0,1,0) fr.BackgroundColor3=Color3.fromRGB(45,10,20) fr.BackgroundTransparency=0.35
+    Instance.new("UICorner", fr).CornerRadius=UDim.new(0,6)
+    local st = Instance.new("UIStroke", fr)
+    st.Color=Color3.fromRGB(255,30,60) st.Thickness=1.4
+    local lb = Instance.new("TextLabel", fr)
+    lb.Size=UDim2.new(1,0,1,0) lb.BackgroundTransparency=1
+    lb.Text=text or "🎯 TARGET LOCK" lb.TextColor3=Color3.fromRGB(255,80,100)
+    lb.Font=Enum.Font.GothamBold lb.TextScaled=true
+    table.insert(S.activeBillboards, bbg)
+end
+
+-- ============================================================
+-- 7. IMMUNITY / SENSORS / COLLIDE
+-- ============================================================
+S.clearSelfImmunity = function(part)
+    if S.activeConstraints[part] then
+        for _, c in ipairs(S.activeConstraints[part]) do if c and c.Parent then c:Destroy() end end
+        S.activeConstraints[part] = nil
+    end
+end
+S.disablePartSensors = function(part)
+    S.sensorState[part] = false
+    pcall(function() part.CanQuery = false part.CanTouch = false end)
+end
+S.enablePartSensors = function(part)
+    S.sensorState[part] = true
+    pcall(function() part.CanQuery = true part.CanTouch = true end)
+end
+S.setPartCollide = function(part, want, force)
+    if part.CanCollide == want then return end
+    if not want or (not S.PartCollideEnabled and not force) then part.CanCollide = false return end
+    local root = S.cachedRoot
+    if root then
+        local d = (part.Position - root.Position).Magnitude
+        local spd = 0
+        pcall(function() spd = part.AssemblyLinearVelocity.Magnitude end)
+        if d < S.FlingGuardRadius or spd > S.FlingCollideMaxSpeed then part.CanCollide = false return end
+    end
+    part.CanCollide = true
+end
+S.antiFlingSnapBack = function(root, hum, spd)
+    local moved = S.lastSafeCharPos and (root.Position - S.lastSafeCharPos).Magnitude or 0
+    if S.AntiFlingEnabled and not S.NativeFlyActive and not S.isPlayerDead
+        and moved > S.FlingMaxJump and spd > (S.FlingMaxSpeed * 0.5) then
+        local keep = CFrame.new(S.lastSafeCharPos) * (root.CFrame - root.CFrame.Position)
+        root.CFrame = keep
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        local st = hum:GetState()
+        if st == Enum.HumanoidStateType.Freefall or st == Enum.HumanoidStateType.FallingDown then
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end
+        S.flingEvents = S.flingEvents + 1
+        if tick() - (S.lastFlingToast or 0) > 3 then
+            S.lastFlingToast = tick()
+            Library:Notify("Anti-fling: snapped back! #" .. S.flingEvents, 3)
+        end
+    elseif not S.isPlayerDead and spd < S.FlingMaxSpeed then
+        S.lastSafeCharPos = root.Position
+    end
+end
+S.enforceFastPartNoClip = function(part, root)
+    if not root or not part.CanCollide then return end
+    local tf = false
+    pcall(function() tf = part.AssemblyLinearVelocity.Magnitude > S.FlingCollideMaxSpeed end)
+    local tcl = (part.Position - root.Position).Magnitude < S.FlingGuardRadius
+    if not tcl and S.headPart and S.headPart.Parent then
+        tcl = (part.Position - S.headPart.Position).Magnitude < (S.HeadGuardRadius or 14)
+    end
+    if tcl or tf then part.CanCollide = false end
+end
+S.spinVec = function(mult)
+    local s = S.JutsuSpin * (mult or 1)
+    if s <= 0 then return Vector3.zero end
+    return Vector3.new(s, s, s)
+end
+S.markStolen = function(part)
+    S.lostEventCount = S.lostEventCount + 1
+    if not S.stolenSet[part] then S.stolenSet[part] = true table.insert(S.stolenList, part) end
+end
+S.clearStolenQueue = function() S.stolenList={} S.stolenSet={} S.stolenIdx=1 end
+S.releaseAllParts = function()
+    for _, p in ipairs(S.verifiedOwnedParts) do
+        if p and p.Parent then S.enablePartSensors(p) S.clearSelfImmunity(p) end
+    end
+    S.verifiedOwnedParts = {}
+    table.clear(S.verifiedSet) table.clear(S.activeHomingParts) table.clear(S.pendingCandidateParts)
+    table.clear(S.pendingKeys)
+    S.pendingIdx=1 S.ghostSnapshot={} S.ghostIdx=1 S.demoteIdx=1
+    table.clear(S.farGrabbedParts)
+    S.clearStolenQueue()
+end
+S.attemptReclaim = function(part)
+    local tot = #S.verifiedOwnedParts
+    if tot == 0 then return false end
+    local budget = math.min(tot, math.max(1, S.AntiStealSample))
+    local toucher, bd = nil, math.huge
+    for s = 1, budget do
+        local c = S.verifiedOwnedParts[((S.reclaimSampleIdx + s - 2) % tot) + 1]
+        if c and c.Parent and c ~= part then
+            local d = (c.Position - part.Position).Magnitude
+            if d < bd then bd = d toucher = c end
+        end
+    end
+    S.reclaimSampleIdx = ((S.reclaimSampleIdx + budget - 1) % tot) + 1
+    if not toucher then return false end
+    pcall(function()
+        local oldT = toucher.CanTouch
+        toucher.CanTouch = true part.CanTouch = true
+        for _ = 1, S.AntiStealPokes do
+            firetouchinterest(toucher, part, 0)
+            firetouchinterest(toucher, part, 1)
+        end
+        toucher.CanTouch = oldT part.CanTouch = false
+    end)
+    return true
+end
+S.applySelfImmunity = function(part)
+    local char = LocalPlayer.Character
+    if not char or S.activeConstraints[part] then return end
+    local cons = {}
+    for _, mp in ipairs(char:GetDescendants()) do
+        if mp:IsA("BasePart") then
+            local ncc = Instance.new("NoCollisionConstraint")
+            ncc.Part0=part ncc.Part1=mp ncc.Parent=part
+            table.insert(cons, ncc)
+        end
+    end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if root then
+        for _, j in ipairs(root:GetJoints()) do
+            local other = (j.Part0 == root and j.Part1) or (j.Part1 == root and j.Part0)
+            if other and other:IsA("BasePart") and not other:IsDescendantOf(char) then
+                local ncc = Instance.new("NoCollisionConstraint")
+                ncc.Part0=part ncc.Part1=other ncc.Parent=part
+                table.insert(cons, ncc)
+            end
+        end
+    end
+    if S.WhitelistFriends then
+        for _, pl in ipairs(Players:GetPlayers()) do
+            if pl ~= LocalPlayer and LocalPlayer:IsFriendsWith(pl.UserId) and pl.Character then
+                for _, fp in ipairs(pl.Character:GetDescendants()) do
+                    if fp:IsA("BasePart") then
+                        local ncc = Instance.new("NoCollisionConstraint")
+                        ncc.Part0=part ncc.Part1=fp ncc.Parent=part
+                        table.insert(cons, ncc)
+                    end
+                end
+            end
+        end
+    end
+    S.activeConstraints[part] = cons
+end
+S.bindCharacterImmunityWatcher = function(char)
+    if not char or S.watchedChars[char] then return end
+    S.watchedChars[char] = true
+    track(char.DescendantAdded:Connect(function(no)
+        if no:IsA("BasePart") then
+            for p, cl in pairs(S.activeConstraints) do
+                if p and p.Parent then
+                    local ncc = Instance.new("NoCollisionConstraint")
+                    ncc.Part0=p ncc.Part1=no ncc.Parent=p
+                    table.insert(cl, ncc)
+                end
+            end
+        end
+    end))
+end
+if LocalPlayer.Character then S.bindCharacterImmunityWatcher(LocalPlayer.Character) end
+S.neutralizeFallDamage = function(char)
+    task.spawn(function()
+        for _ = 1, 15 do
+            if not char then break end
+            local fs = char:FindFirstChild("FallDamageScript") or char:FindFirstChild("FallDamage")
+            if fs then pcall(function() fs.Disabled = true fs:Destroy() end) break end
+            task.wait(0.3)
+        end
+    end)
+end
+if LocalPlayer.Character then S.neutralizeFallDamage(LocalPlayer.Character) end
+
+-- ============================================================
+-- 8. SCAN / TARGETING
+-- ============================================================
+S.otherLimbSet={} S.otherLimbRefresh=0
+S.refreshOtherLimbSet = function()
+    local fr = {}
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LocalPlayer and pl.Character then
+            for _, d in ipairs(pl.Character:GetDescendants()) do
+                if d:IsA("BasePart") then fr[d] = true end
+            end
+        end
+    end
+    S.otherLimbSet = fr S.otherLimbRefresh = tick()
+end
+S.isOtherPlayerLimb = function(p)
+    if tick() - S.otherLimbRefresh > 0.5 then S.refreshOtherLimbSet() end
+    return S.otherLimbSet[p] == true
+end
+S.gatherPartsNearby = function(cp, radius, skipBox)
+    local res = {}
+    local r = math.max(radius or S.OwnershipRadius, 8)
+    local ok = pcall(function()
+        local pr = OverlapParams.new()
+        pr.FilterType = Enum.RaycastFilterType.Exclude
+        pr.FilterDescendantsInstances = { LocalPlayer.Character }
+        pr.MaxParts = (r > (S.OwnershipRadius or 200)) and 800 or 500
+        for _, h in ipairs(workspace:GetPartBoundsInRadius(cp, r, pr)) do table.insert(res, h) end
+        if skipBox then return end
+        local bh = r + S.TractorBeamDepth
+        local bc = cp + Vector3.new(0, (r - S.TractorBeamDepth) * 0.5, 0)
+        local bs = Vector3.new(r * 2 + 8, bh, r * 2 + 8)
+        for _, h in ipairs(workspace:GetPartBoundsInBox(CFrame.new(bc), bs, pr)) do table.insert(res, h) end
+    end)
+    if not ok then
+        res = {}
+        for _, p in ipairs(workspace:GetDescendants()) do if p:IsA("BasePart") then table.insert(res, p) end end
+    end
+    return res
+end
+S.considerCandidate = function(p, rp, checked, radius)
+    if not (p and p.Parent and p:IsA("BasePart")) then return end
+    if checked and checked[p] then return end
+    local char = LocalPlayer.Character
+    if p.Anchored or not p.AssemblyRootPart or p.AssemblyRootPart.Anchored then return end
+    if char and p:IsDescendantOf(char) then return end
+    if p.Name == "HumanoidRootPart" then return end
+    if S.isOtherPlayerLimb(p) then return end
+    if math.max(p.Size.X, math.max(p.Size.Y, p.Size.Z)) > S.MaxPartSize then return end
+    if checked then checked[p] = true end
+    local pp = p.Position
+    local d3 = (pp - rp).Magnitude
+    local hd = (Vector3.new(pp.X,0,pp.Z) - Vector3.new(rp.X,0,rp.Z)).Magnitude
+    local vd = rp.Y - pp.Y
+    local R = math.max(radius or S.OwnershipRadius, 8)
+    if not ((d3 <= R) or (hd <= R and vd >= -R and vd <= S.TractorBeamDepth)) then return end
+    if S.pendingCandidateParts[p] or S.verifiedSet[p] then return end
+    S.pendingCandidateParts[p] = tick()
+end
+S.scanCandidateParts = function()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root or S.isPlayerDead then return end
+    local rp = root.Position
+    local ck = {}
+    for _, p in ipairs(S.gatherPartsNearby(rp, S.OwnershipRadius, false)) do
+        S.considerCandidate(p, rp, ck, S.OwnershipRadius)
+    end
+end
+S.farScanParts = function()
+    if not S.FarGrabEnabled or (S.perfPressure or 0) >= 3 then return end
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root or S.isPlayerDead then return end
+    local fr = S.scanRadius()
+    if fr <= (S.OwnershipRadius or 200) + 1 then return end
+    local rp = root.Position
+    local ck = {}
+    for _, p in ipairs(S.gatherPartsNearby(rp, fr, true)) do
+        S.considerCandidate(p, rp, ck, fr)
+    end
+end
+S.ghostScanSweep = function(rp)
+    local b = math.max(50, S.GhostScanBatch)
+    if S.perfPressure >= 2 then b = math.max(40, math.floor(b * 0.5)) end
+    local proc = 0
+    while proc < b do
+        if S.ghostIdx > #S.ghostSnapshot then S.ghostIdx = 1 break end
+        local o = S.ghostSnapshot[S.ghostIdx]
+        S.ghostIdx = S.ghostIdx + 1
+        proc = proc + 1
+        if o and o.Parent then S.considerCandidate(o, rp, nil, S.scanRadius()) end
+    end
+end
+track(workspace.ChildAdded:Connect(function()
+    if S.AutoReclaimRound and S.EngineActive then
+        local n = tick()
+        if n - S.lastChildAddedScan < 0.6 then return end
+        S.lastChildAddedScan = n
+        task.delay(1.2, function() S.scanCandidateParts() end)
+    end
+end))
+S.findTargetBySmartQuery = function(q)
+    if not q or q == "" then return nil end
+    local cl = q:gsub("@", ""):gsub("%s+", ""):lower()
+    if cl == "" then return nil end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            if not (S.WhitelistFriends and LocalPlayer:IsFriendsWith(p.UserId)) then
+                local un = p.Name:lower():gsub("%s+", "")
+                local dn = p.DisplayName:lower():gsub("%s+", "")
+                if string.find(un, cl, 1, true) or string.find(dn, cl, 1, true) then return p end
+            end
+        end
+    end
+    return nil
+end
+S.performRandomScan = function()
+    S.clearBillboards()
+    S.CurrentRandomTargets = {}
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not root or S.isPlayerDead then return end
+    local list = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            if not (S.WhitelistFriends and LocalPlayer:IsFriendsWith(p.UserId)) then
+                local d = (p.Character.HumanoidRootPart.Position - root.Position).Magnitude
+                if d <= S.OwnershipRadius then table.insert(list, {Player=p, Dist=d}) end
+            end
+        end
+    end
+    table.sort(list, function(a,b) return a.Dist < b.Dist end)
+    for i = 1, math.min(#list, S.RandomTargetCount) do
+        local tp = list[i].Player
+        table.insert(S.CurrentRandomTargets, tp)
+        if tp.Character then S.createTargetBillboard(tp.Character, "🎯 RANDOM TARGET LOCK") end
+    end
+end
+
+-- ============================================================
+-- 9. ATTACK TRIGGERS
+-- ============================================================
+S.triggerGojoHollowPurple = function()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root or S.HollowPurpleActive or S.isPlayerDead then return end
+    local cam = workspace.CurrentCamera
+    S.HollowPurpleActive = true S.HollowPurpleState = 1 S.HollowPurpleStart = tick()
+    S.HollowPurpleDir = cam.CFrame.LookVector
+    S.HollowPurplePos = root.Position + (S.HollowPurpleDir * 5.0) + Vector3.new(0, 1.2, 0)
+    Library:Notify("Hollow Purple charging! 💜", 3)
+end
+S.triggerBladeSlash = function()
+    if S.SlashActive or S.isPlayerDead then return end
+    S.SlashActive = true S.SlashPhase = 1 S.SlashStartTime = tick()
+    Library:Notify("180° cleave slash! ⚔️", 3)
+end
+S.triggerDivinePalmSmash = function()
+    if S.PalmActive or S.isPlayerDead then return end
+    local target = S.SelectedTargetPlayer and S.SelectedTargetPlayer.Character
+        and S.SelectedTargetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not target then
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        local closest, cd = nil, math.huge
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                if not (S.WhitelistFriends and LocalPlayer:IsFriendsWith(p.UserId)) then
+                    local d = (p.Character.HumanoidRootPart.Position - root.Position).Magnitude
+                    if d < cd then closest = p cd = d end
+                end
+            end
+        end
+        if closest then target = closest.Character.HumanoidRootPart end
+    end
+    if not target then Library:Notify("Select a target first! ❌", 3) return end
+    S.PalmTargetRoot = target S.PalmActive = true S.PalmPhase = 1 S.PalmStartTime = tick()
+    Library:Notify("Ground smash & uppercut! 🖐️💥", 3)
+end
+S.executeTargetAttack = function()
+    if S.isPlayerDead then return end
+    if S.GojoModeEnabled then S.triggerGojoHollowPurple() return end
+    if S.BladeSlashMode then S.triggerBladeSlash() return end
+    if S.DivinePalmMode then S.triggerDivinePalmSmash() return end
+    local targets = {}
+    if S.TargetMode == 1 then
+        if S.SelectedTargetPlayer then table.insert(targets, S.SelectedTargetPlayer) end
+    elseif S.TargetMode == 2 then
+        for p in pairs(S.MultiLockedPlayers) do if p and p.Parent then table.insert(targets, p) end end
+    elseif S.TargetMode == 3 then
+        if #S.CurrentRandomTargets == 0 then S.performRandomScan() end
+        targets = S.CurrentRandomTargets
+    elseif S.TargetMode == 4 then
+        if S.SuperLockTarget then table.insert(targets, S.SuperLockTarget) end
+    end
+    if #targets == 0 then return end
+    local av = {}
+    for _, p in ipairs(S.verifiedOwnedParts) do
+        if p and p.Parent and not p.Anchored and not S.activeHomingParts[p] then table.insert(av, p) end
+    end
+    if #av == 0 then return end
+    local pi = 1
+    for _, tp in ipairs(targets) do
+        if tp and tp.Character then
+            local tr = tp.Character:FindFirstChild("HumanoidRootPart")
+            if tr then
+                for a = 1, S.LaunchAmmoCount do
+                    if pi > #av then break end
+                    local pt = av[pi]
+                    local aa = ((a - 1) - (S.LaunchAmmoCount / 2)) * 0.4
+                    local sx = math.sin(aa) * (S.StagingDistance * 0.7)
+                    local sy = (a % 2 == 0) and 1.2 or -0.4
+                    S.activeHomingParts[pt] = {
+                        Phase = S.StagingAttackEnabled and 1 or 2,
+                        StartTime = tick(),
+                        StagingOffset = Vector3.new(sx, sy, -S.StagingDistance),
+                        Target = tr, TargetPlayer = tp, TargetInitialPos = tr.Position
+                    }
+                    S.enablePartSensors(pt)
+                    pt.CanCollide = false
+                    pi = pi + 1
+                end
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- 10. CENTER RING HELPERS
+-- ============================================================
+S.blameName = function()
+    local p = S.CenterTargetPlayer
+    if S.CenterMode == 2 and S.CenterBlameAnnounce and p and p.Parent then
+        local ok, dn = pcall(function() return p.DisplayName end)
+        if ok and dn then return tostring(dn) end
+        return tostring(p.Name)
+    end
+    return LocalPlayer.DisplayName
+end
+S.getCenterTargetRoot = function()
+    local p = S.CenterTargetPlayer
+    if not p or not p.Parent then return nil end
+    local c = p.Character
+    if not c then return nil end
+    return c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("UpperTorso") or c:FindFirstChild("Torso")
+end
+S.getNearestOtherPlayer = function()
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local best, bd = nil, math.huge
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local pr = p.Character:FindFirstChild("HumanoidRootPart")
+            if pr then
+                local d = root and (pr.Position - root.Position).Magnitude or 0
+                if d < bd then best = p bd = d end
+            end
+        end
+    end
+    return best
+end
+
+-- ============================================================
+-- 11. NECK GUARD / DEATH RESCUE
+-- ============================================================
+S.applyNeckGuard = function(char, force)
+    if not S.NeckGuardEnabled or not char or not char.Parent then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    pcall(function() hum.RequiresNeck = false end)
+    S.headPart = char:FindFirstChild("Head") or S.headPart
+    if S.neckChar == char and S.neckTemplate and not force then return end
+    S.neckChar = char
+    local neck = char:FindFirstChild("Neck", true)
+    if neck and neck:IsA("Motor6D") and neck.Part0 and neck.Part1 then
+        S.neckTemplate = {Part0=neck.Part0, Part1=neck.Part1, C0=neck.C0, C1=neck.C1}
+    elseif not S.neckTemplate then
+        S.buildNeckTemplate(char)
+    end
+end
+S.buildNeckTemplate = function(char)
+    if not char then return nil end
+    local head = char:FindFirstChild("Head")
+    local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+    if not (head and torso) then return nil end
+    S.neckTemplate = {
+        Part0 = torso, Part1 = head,
+        C0 = CFrame.new(0, torso.Size.Y * 0.5, 0),
+        C1 = CFrame.new(0, -head.Size.Y * 0.5, 0)
+    }
+    return S.neckTemplate
+end
+S.repairNeck = function(char)
+    if not S.NeckGuardEnabled or not char then return false end
+    if not S.neckTemplate then S.buildNeckTemplate(char) end
+    if not S.neckTemplate then return false end
+    local t = S.neckTemplate
+    if not (t.Part0 and t.Part0.Parent and t.Part1 and t.Part1.Parent) then return false end
+    local h = char:FindFirstChild("Neck", true)
+    if h and h:IsA("Motor6D") and h.Part0 and h.Part1 then return false end
+    if h then pcall(function() h:Destroy() end) end
+    local m = Instance.new("Motor6D")
+    m.Name = "Neck" m.Part0 = t.Part0 m.Part1 = t.Part1 m.C0 = t.C0 m.C1 = t.C1
+    m.Parent = t.Part0
+    return true
+end
+S.voidGuardTick = function(root)
+    if not S.VoidGuardEnabled or not root then return end
+    local fy = S.voidGuardY()
+    if root.Position.Y < fy then
+        local kr = root.CFrame - root.CFrame.Position
+        root.CFrame = CFrame.new(Vector3.new(root.Position.X, fy + 6, root.Position.Z)) * kr
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        S.voidSaves = (S.voidSaves or 0) + 1
+        if tick() - (S.lastVoidToast or 0) > 5 then
+            S.lastVoidToast = tick()
+            Library:Notify("Void guard: pulled back (x" .. S.voidSaves .. ")", 3)
+        end
+    end
+end
+S.deathGuardTick = function(root, hum)
+    if S.isPlayerDead or not hum or not hum.Parent then return end
+    local char = hum.Parent
+    if S.NeckGuardEnabled then S.applyNeckGuard(char, false) S.repairNeck(char) end
+    S.voidGuardTick(root)
+    if not S.RescueEnabled then S.lastHealth = hum.Health return end
+    local h = hum.Health
+    local mh = hum.MaxHealth
+    if (S.lastHealth ~= nil) and h < S.lastHealth - 0.5 then
+        S.lastHealthDropInfo = "HP " .. math.floor(S.lastHealth) .. "->" .. math.floor(h)
+            .. " parts=" .. #S.verifiedOwnedParts .. " y=" .. math.floor(root and root.Position.Y or 0)
+    end
+    S.lastHealth = h
+    if h <= 0 then
+        if (S.rescueCount or 0) < (S.RescueMax or 5) and (tick() - (S.lastRescueTick or 0) > 1) then
+            S.rescueCount = (S.rescueCount or 0) + 1
+            S.lastRescueTick = tick() S.lastHealth = mh
+            pcall(function() hum.Health = mh end)
+            Library:Notify("Death refused (" .. S.rescueCount .. "/" .. (S.RescueMax or 5) .. ")", 3)
+        end
+    elseif (S.rescueCount or 0) > 0 and h > mh * 0.6 and (tick() - (S.lastRescueTick or 0) > 6) then
+        S.rescueCount = 0
+    end
+end
+S.setupDeathListener = function(char)
+    local hum = char:WaitForChild("Humanoid", 5)
+    if hum then
+        track(hum.Died:Connect(function()
+            S.isPlayerDead = true
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then S.deathPosition = root.Position end
+            pcall(function()
+                local nl = (char:FindFirstChild("Neck", true) == nil)
+                local info = "HP0 parts=" .. #S.verifiedOwnedParts
+                    .. " y=" .. math.floor(root and root.Position.Y or 0)
+                    .. " neck=" .. (nl and "LOST" or "ok")
+                    .. " simrad=" .. math.floor(S.currentBoostRadius or 0)
+                    .. " | " .. tostring(S.lastHealthDropInfo or "-")
+                S.lastDeathInfo = info
+                S.deathCauses[#S.deathCauses + 1] = info
+                Library:Notify("Death #" .. #S.deathCauses .. ": " .. info, 6)
+            end)
+            table.clear(S.frozenPartPositions)
+            for _, p in ipairs(S.verifiedOwnedParts) do
+                if p and p.Parent and not p.Anchored then
+                    S.frozenPartPositions[p] = p.CFrame
+                    p.AssemblyLinearVelocity = Vector3.zero
+                    p.AssemblyAngularVelocity = Vector3.zero
+                end
+            end
+        end))
+    end
+end
+if LocalPlayer.Character then
+    S.setupDeathListener(LocalPlayer.Character)
+    S.applyNeckGuard(LocalPlayer.Character, true)
+end
+track(LocalPlayer.CharacterAdded:Connect(function(nc)
+    task.wait(0.4)
+    local root = nc:WaitForChild("HumanoidRootPart", 5)
+    local hum = nc:WaitForChild("Humanoid", 5)
+    if root and hum then
+        S.isPlayerDead = false
+        S.animTracks={} S.animFailedId={} S.animCurrentSlot=nil
+        S.frozenPartPositions = setmetatable({},{__mode="k"})
+        S.setupDeathListener(nc)
+        S.bindCharacterImmunityWatcher(nc)
+        S.neutralizeFallDamage(nc)
+        S.FlyAltitudeY = root.Position.Y
+        S.voidFloorY=nil S.lastHealth=nil S.rescueCount=0 S.headPart=nil S.neckTemplate=nil
+        S.applyNeckGuard(nc, true)
+        if S.AntiSitEnabled then
+            hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+            hum.Seated:Connect(function(s)
+                if s and S.AntiSitEnabled then hum.Sit = false hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+            end)
+        end
+        for _, p in ipairs(S.verifiedOwnedParts) do
+            S.clearSelfImmunity(p) S.applySelfImmunity(p) S.disablePartSensors(p)
+        end
+        Library:Notify("Parts returning from grave!", 3)
+    end
+end))
+S.lodSkipOrbit = function(i)
+    if S.perfPressure <= 0 or #S.verifiedOwnedParts < 60 then return false end
+    local st = (S.perfPressure >= 2) and 3 or 2
+    return (i % st) ~= (S.frameCounter % st)
+end
+
+-- ============================================================
+-- 12. OBSIDIAN WINDOW
+-- ============================================================
+local Window = Library:CreateWindow({
+    Title = "W7s Blackhole Ultimate",
+    Subtitle = "V40 | 28 Formations | Obsidian Edition",
+    Size = UDim2.fromOffset(620, 520),
+    Theme = "DarkBlue",
+    HasOutline = true,
+    Center = true,
+    AutoShow = true,
+})
+local Tabs = {
+    Shape    = Window:AddTab("Shape"),
+    Center   = Window:AddTab("Center"),
+    Combat   = Window:AddTab("Combat"),
+    Radius   = Window:AddTab("Radius"),
+    Settings = Window:AddTab("Settings"),
+}
+local GroupShape     = Tabs.Shape:AddLeftGroupbox("Formation")
+local GroupRot       = Tabs.Shape:AddRightGroupbox("3D Rotation")
+local GroupTune      = Tabs.Shape:AddRightGroupbox("Tuning")
+local GroupCenter    = Tabs.Center:AddLeftGroupbox("Center Ring")
+local GroupCenterEx  = Tabs.Center:AddRightGroupbox("Center Options")
+local GroupCombat    = Tabs.Combat:AddLeftGroupbox("Target & Attack")
+local GroupJutsu     = Tabs.Combat:AddRightGroupbox("Jutsu Modes")
+local GroupRadius    = Tabs.Radius:AddLeftGroupbox("Radius & Far Grab")
+local GroupLife      = Tabs.Radius:AddRightGroupbox("Life Guard")
+local GroupRepl      = Tabs.Settings:AddLeftGroupbox("Replication / SFX")
+local GroupAntiFling = Tabs.Settings:AddLeftGroupbox("Anti-Fling / No-Clip")
+local GroupSave      = Tabs.Settings:AddRightGroupbox("Config")
+
+S.JUTSU_MODE_NAMES = {
+    DivinePalmMode = "🖐️ GIANT HAND MODE",
+    BladeSlashMode = "⚔️ BLADE MODE",
+    GojoModeEnabled = "💜 GOJO PURPLE",
+}
+S.jutsuModeName = function()
+    if S.DivinePalmMode then return S.JUTSU_MODE_NAMES.DivinePalmMode end
+    if S.BladeSlashMode then return S.JUTSU_MODE_NAMES.BladeSlashMode end
+    if S.GojoModeEnabled then return S.JUTSU_MODE_NAMES.GojoModeEnabled end
+    return nil
+end
+S.setJutsuMode = function(name, v)
+    S[name] = v and true or false
+    if v then
+        for o in pairs(S.JUTSU_MODE_NAMES) do if o ~= name then S[o] = false end end
+        Library:Notify(S.JUTSU_MODE_NAMES[name]
+            .. " is now holding FORMATION. Pick any formation to go back.", 5)
+    end
+end
+S.clearJutsuModes = function()
+    local had = S.jutsuModeName()
+    if not had and not S.SlashActive and not S.PalmActive and not S.HollowPurpleActive then return nil end
+    S.DivinePalmMode=false S.BladeSlashMode=false S.GojoModeEnabled=false
+    S.SlashActive=false S.SlashPhase=0 S.PalmActive=false S.PalmPhase=0 S.PalmTargetRoot=nil
+    S.HollowPurpleActive=false S.HollowPurpleState=0
+    return had
+end
+
+-- ============================================================
+-- 13. TAB: SHAPE
+-- ============================================================
+GroupShape:AddButton({
+    Text = "Toggle System",
+    Func = function()
+        S.EngineActive = not S.EngineActive
+        if S.EngineActive then
+            S.scanCandidateParts() S.farScanParts()
+            S.playSfx("rbxasset://sounds/electronicpingshort.wav", 0.55, 1)
+            S.announceToChat("🌀 W7s Blackhole Ultimate V40 ACTIVE — " .. S.blameName() .. " ready!", true)
+            S.tauntUntil = tick() + 2.5
+            Library:Notify("System: ON", 3)
+        else
+            S.clearBillboards() S.releaseAllParts()
+            S.frozenPartPositions = setmetatable({},{__mode="k"})
+            S.stopAllAnimTracks() S.ShowcaseActive = false S.perfPressure = 0
+            S.playSfx("rbxasset://sounds/electronicpingshort.wav", 0.45, 0.7)
+            S.announceToChat("🌀 W7s Blackhole Ultimate disabled.", true)
+            Library:Notify("System: OFF", 3)
+        end
+    end,
+})
+GroupShape:AddDropdown("FormationSelect", {
+    Text = "Formation",
+    Values = S.FormationNames,
+    Default = S.FormationNames[1],
+    Multi = false,
+    Callback = function(ch)
+        local pick
+        for i, n in ipairs(S.FormationNames) do if n == ch then pick = i break end end
+        if pick then
+            local had = S.clearJutsuModes()
+            if had then Library:Notify(had .. " disabled — now making " .. S.FormationNames[pick], 4) end
+            S.CurrentFormation = pick
+        end
+    end,
+})
+GroupShape:AddSlider("PullStrength", {Text="Pull Strength", Default=S.PullStrength, Min=1, Max=1000, Rounding=0, Callback=function(v) S.PullStrength=v end})
+GroupShape:AddSlider("OrbitRadius",  {Text="Formation Radius", Default=S.OrbitRadius, Min=2, Max=1000, Rounding=0, Callback=function(v) S.OrbitRadius=v end})
+GroupShape:AddSlider("SatelliteDist",{Text="Satellite Distance", Default=S.SatelliteDist, Min=4, Max=15, Rounding=1, Callback=function(v) S.SatelliteDist=v end})
+GroupShape:AddSlider("OrbitSpeed",   {Text="Orbit Speed (0 = static)", Default=S.OrbitSpeed, Min=0, Max=50, Rounding=1, Callback=function(v) S.OrbitSpeed=v end})
+
+GroupRot:AddButton({Text="X +90° (TILT)", Func=function() S.RotationX=(S.RotationX+90)%360 end})
+GroupRot:AddButton({Text="Y +90° (YAW)",  Func=function() S.RotationY=(S.RotationY+90)%360 end})
+GroupRot:AddButton({Text="Z +90° (ROLL)", Func=function() S.RotationZ=(S.RotationZ+90)%360 end})
+GroupRot:AddButton({Text="Reset Rotations",Func=function() S.RotationX=0 S.RotationY=0 S.RotationZ=0 end})
+
+GroupTune:AddSlider("OrbitOffsetX", {Text="Offset X (right/left)", Default=0, Min=-1000, Max=1000, Rounding=0, Callback=function(v) S.OrbitOffsetX=v end})
+GroupTune:AddSlider("OrbitHeight",  {Text="Offset Y (up/down)",   Default=0, Min=-1000, Max=1000, Rounding=0, Callback=function(v) S.OrbitHeight=v end})
+GroupTune:AddSlider("OrbitOffsetZ", {Text="Offset Z (front/back)",Default=0, Min=-1000, Max=1000, Rounding=0, Callback=function(v) S.OrbitOffsetZ=v end})
+
+-- ============================================================
+-- 14. TAB: CENTER
+-- ============================================================
+local CenterInfoLabel = GroupCenter:AddLabel("Center: MYSELF (normal)")
+
+local centerValues = {}
+local function refreshCenterDropdown()
+    table.clear(centerValues)
+    table.insert(centerValues, "(none)")
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then table.insert(centerValues, p.Name) end
+    end
+end
+refreshCenterDropdown()
+
+local centerDropdown
+centerDropdown = GroupCenter:AddDropdown("CenterPlayer", {
+    Text = "Center ring on player",
+    Values = centerValues,
+    Default = "(none)",
+    Multi = false,
+    Callback = function(ch)
+        if ch == "(none)" then
+            S.CenterTargetPlayer=nil S.CenterTargetName="" S.CenterMode=1 S.centerCF=nil
+            CenterInfoLabel:SetText("Center: MYSELF (normal)")
+            Library:Notify("Center back to yourself", 3)
+            return
+        end
+        local p = Players:FindFirstChild(ch)
+        if p and p ~= LocalPlayer then
+            S.CenterTargetPlayer=p S.CenterTargetName=p.Name S.CenterMode=2
+            CenterInfoLabel:SetText("Center: @" .. p.Name)
+            Library:Notify("Center moved to @" .. p.Name, 3)
+            S.announceToChat("🌀 " .. S.blameName() .. " called a blackhole!", true)
+        end
+    end,
+})
+GroupCenter:AddButton({
+    Text = "Use current lock target",
+    Func = function()
+        if S.SelectedTargetPlayer then
+            S.CenterTargetPlayer=S.SelectedTargetPlayer S.CenterTargetName=S.SelectedTargetPlayer.Name S.CenterMode=2
+            CenterInfoLabel:SetText("Center: @" .. S.SelectedTargetPlayer.Name)
+            Library:Notify("Center moved to @" .. S.SelectedTargetPlayer.Name, 3)
+        else
+            Library:Notify("Lock a target first in Combat tab 🎯", 3)
+        end
+    end,
+})
+GroupCenter:AddButton({
+    Text = "Refresh player list",
+    Func = function()
+        refreshCenterDropdown()
+        if centerDropdown and centerDropdown.Refresh then centerDropdown:Refresh(centerValues) end
+        Library:Notify("Player list refreshed", 2)
+    end,
+})
+GroupCenterEx:AddToggle("CenterAutoChase",   {Text="Auto-approach center", Default=S.CenterAutoChase, Callback=function(v) S.CenterAutoChase=v end})
+GroupCenterEx:AddToggle("CenterBlameAnnounce",{Text="Announce using target's name (frame)", Default=S.CenterBlameAnnounce, Callback=function(v) S.CenterBlameAnnounce=v end})
+GroupCenterEx:AddToggle("CenterOrbitCollide",{Text="⚠️ Orbit parts collide with center", Default=S.CenterOrbitCollide,
+    Callback=function(v)
+        S.CenterOrbitCollide=v
+        if not v then for _, p in ipairs(S.verifiedOwnedParts) do S.setPartCollide(p, false) end end
+    end})
+GroupCenterEx:AddSlider("CenterFollowSpeed", {Text="Center follow smoothness", Default=S.CenterFollowSpeed, Min=1, Max=30, Rounding=0, Callback=function(v) S.CenterFollowSpeed=v end})
+GroupCenterEx:AddSlider("CenterChaseDist",   {Text="Start approaching if dist >", Default=S.CenterChaseDist, Min=20, Max=400, Rounding=0, Callback=function(v) S.CenterChaseDist=v end})
+GroupCenterEx:AddSlider("CenterChaseStop",   {Text="Stop approaching if dist <", Default=S.CenterChaseStop, Min=5, Max=200, Rounding=0, Callback=function(v) S.CenterChaseStop=v end})
+
+-- ============================================================
+-- 15. TAB: COMBAT
+-- ============================================================
+local TargetInfoLabel = GroupCombat:AddLabel("Target: [ none ]")
+GroupCombat:AddDropdown("TargetMode", {
+    Text="Target mode", Values=S.TargetModeNames, Default=S.TargetModeNames[1], Multi=false,
+    Callback=function(ch) for i, n in ipairs(S.TargetModeNames) do if n==ch then S.TargetMode=i break end end end
+})
+local searchInput = GroupCombat:AddInput("SmartSearch", {
+    Text="Player name search", Default="", Placeholder="Type name / display name...",
+    Callback=function(v)
+        local m = S.findTargetBySmartQuery(v)
+        if m then TargetInfoLabel:SetText("Found: @" .. m.Name .. " (" .. m.DisplayName .. ")") end
+    end,
+})
+GroupCombat:AddButton({
+    Text = "🔒 Lock target",
+    Func = function()
+        local m = S.findTargetBySmartQuery(searchInput.Value or "")
+        if m then
+            if S.TargetMode == 2 then
+                local c = 0
+                for _ in pairs(S.MultiLockedPlayers) do c = c + 1 end
+                if c < 3 then
+                    S.MultiLockedPlayers[m] = true
+                    TargetInfoLabel:SetText("Multi-lock: @" .. m.Name .. " (" .. (c + 1) .. "/3)")
+                    if m.Character then S.createTargetBillboard(m.Character, "🎯 MULTI-LOCKED") end
+                else
+                    TargetInfoLabel:SetText("Multi-lock full (max 3)")
+                end
+            else
+                S.SelectedTargetPlayer=m S.SuperLockTarget=m
+                TargetInfoLabel:SetText("Target: @" .. m.Name .. " (" .. m.DisplayName .. ")")
+                if m.Character then S.createTargetBillboard(m.Character, "🎯 TARGET LOCKED") end
+            end
+        else
+            TargetInfoLabel:SetText("Target not found!")
+        end
+    end,
+})
+GroupCombat:AddButton({
+    Text = "🎯 Pick nearest player",
+    Func = function()
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not root then TargetInfoLabel:SetText("Character not spawned!") return end
+        local cl, cd = nil, math.huge
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                if not (S.WhitelistFriends and LocalPlayer:IsFriendsWith(p.UserId)) then
+                    local d = (p.Character.HumanoidRootPart.Position - root.Position).Magnitude
+                    if d < cd then cl = p cd = d end
+                end
+            end
+        end
+        if cl then
+            S.SelectedTargetPlayer=cl S.SuperLockTarget=cl
+            TargetInfoLabel:SetText("Target: @" .. cl.Name .. " | " .. math.floor(cd) .. " studs")
+            if cl.Character then S.createTargetBillboard(cl.Character, "🎯 TARGET LOCKED") end
+        else
+            TargetInfoLabel:SetText("No players nearby!")
+        end
+    end,
+})
+GroupCombat:AddToggle("SuperLockActive", {Text="💀 Super Lock (infinite loop)", Default=false,
+    Callback=function(v)
+        S.SuperLockActive = v
+        if v and not S.SuperLockTarget then S.SuperLockTarget = S.SelectedTargetPlayer end
+        if v and S.SuperLockTarget then S.TargetMode=4 Library:Notify("Super Lock on @" .. S.SuperLockTarget.Name, 3)
+        elseif v and not S.SuperLockTarget then S.SuperLockActive=false Library:Notify("Lock a target first", 3) end
+    end})
+GroupCombat:AddToggle("AutoRandomScan", {Text="🔄 Auto random scan (3s)", Default=S.AutoRandomScan,
+    Callback=function(v) S.AutoRandomScan=v if not v then S.clearBillboards() end end})
+GroupCombat:AddToggle("StagingAttackEnabled", {Text="🎬 Staging animation (gather at chest)", Default=S.StagingAttackEnabled,
+    Callback=function(v) S.StagingAttackEnabled=v end})
+GroupCombat:AddToggle("PartNoclipAttack", {Text="🧱 Wall pierce (hit through walls)", Default=S.PartNoclipAttack,
+    Callback=function(v) S.PartNoclipAttack=v end})
+GroupCombat:AddSlider("WallPierceDist",  {Text="Wall pierce start distance", Default=S.WallPierceDist, Min=4, Max=60, Rounding=0, Callback=function(v) S.WallPierceDist=v end})
+GroupCombat:AddSlider("StagingDistance", {Text="Staging chest distance", Default=S.StagingDistance, Min=4, Max=20, Rounding=0, Callback=function(v) S.StagingDistance=v end})
+GroupCombat:AddSlider("LaunchAmmoCount", {Text="Ammo per target", Default=S.LaunchAmmoCount, Min=1, Max=100, Rounding=0, Callback=function(v) S.LaunchAmmoCount=v end})
+GroupCombat:AddSlider("RandomTargetCount",{Text="Random target count", Default=S.RandomTargetCount, Min=1, Max=50, Rounding=0, Callback=function(v) S.RandomTargetCount=v end})
+GroupCombat:AddSlider("LaunchSpeed",     {Text="Launch speed", Default=S.LaunchSpeed, Min=50, Max=300, Rounding=0, Callback=function(v) S.LaunchSpeed=v end})
+GroupCombat:AddSlider("RecallThreshold", {Text="Recall threshold", Default=S.RecallThreshold, Min=1, Max=10000, Rounding=0, Callback=function(v) S.RecallThreshold=v end})
+GroupCombat:AddButton({Text="🚀 LAUNCH ATTACK", Func=function() S.executeTargetAttack() end})
+
+GroupJutsu:AddToggle("DivinePalmMode", {Text="🖐️ Giant Hand Mode", Default=S.DivinePalmMode,
+    Callback=function(v) S.setJutsuMode("DivinePalmMode", v) end})
+GroupJutsu:AddSlider("HandScale", {Text="Hand scale", Default=S.HandScale, Min=5, Max=80, Rounding=0, Callback=function(v) S.HandScale=v end})
+GroupJutsu:AddToggle("BladeSlashMode", {Text="⚔️ Blade Mode", Default=S.BladeSlashMode,
+    Callback=function(v) S.setJutsuMode("BladeSlashMode", v) end})
+GroupJutsu:AddSlider("BladeLength", {Text="Blade length", Default=S.BladeLength, Min=10, Max=100, Rounding=0, Callback=function(v) S.BladeLength=v end})
+GroupJutsu:AddToggle("GojoModeEnabled", {Text="💜 Gojo Hollow Purple", Default=S.GojoModeEnabled,
+    Callback=function(v) S.setJutsuMode("GojoModeEnabled", v) end})
+
+-- ============================================================
+-- 16. TAB: RADIUS
+-- ============================================================
+GroupRadius:AddSlider("OwnershipRadius", {Text="Horizontal 3D radius", Default=S.OwnershipRadius, Min=10, Max=10000, Rounding=0,
+    Callback=function(v) S.OwnershipRadius=v S.escalatedRadius=nil S.boostSimRadius() end})
+GroupRadius:AddSlider("FarGrabRadius", {Text="Far grab range", Default=S.FarGrabRadius, Min=100, Max=2000, Rounding=0,
+    Callback=function(v) S.FarGrabRadius=v S.escalatedRadius=nil S.boostSimRadius() end})
+GroupRadius:AddToggle("FarGrabEnabled", {Text="🧲 Far Grab enabled", Default=S.FarGrabEnabled,
+    Callback=function(v) S.FarGrabEnabled=v S.escalatedRadius=nil S.boostSimRadius() end})
+GroupRadius:AddSlider("FarGrabTetherDist", {Text="Tether start (push, not teleport)", Default=S.FarGrabTetherDist, Min=40, Max=400, Rounding=0, Callback=function(v) S.FarGrabTetherDist=v end})
+GroupRadius:AddSlider("FarGrabTopSpeed",   {Text="Far pull top speed", Default=S.FarGrabTopSpeed, Min=60, Max=1000, Rounding=0, Callback=function(v) S.FarGrabTopSpeed=v end})
+GroupRadius:AddToggle("SimRadDominate", {Text="👑 Dominate other players' sim radius", Default=S.SimRadDominate,
+    Callback=function(v) S.SimRadDominate=v end})
+GroupRadius:AddSlider("SimRadMin", {Text="SimRadius floor", Default=S.SimRadMin, Min=10, Max=20000, Rounding=0,
+    Callback=function(v) S.SimRadMin=v S.boostSimRadius() end})
+GroupRadius:AddSlider("SimRadMax", {Text="SimRadius cap", Default=S.SimRadMax, Min=10, Max=20000, Rounding=0,
+    Callback=function(v) S.SimRadMax=v if S.SimRadMin and S.SimRadMin > S.SimRadMax then S.SimRadMin=S.SimRadMax end S.boostSimRadius() end})
+GroupRadius:AddSlider("TractorBeamDepth", {Text="Tractor beam depth", Default=S.TractorBeamDepth, Min=50, Max=1000, Rounding=0, Callback=function(v) S.TractorBeamDepth=v end})
+GroupRadius:AddSlider("PartQuota",     {Text="Part quota", Default=S.PartQuota, Min=1, Max=1000, Rounding=0, Callback=function(v) S.PartQuota=v end})
+GroupRadius:AddSlider("MaxPartSize",   {Text="Max part size", Default=S.MaxPartSize, Min=10, Max=500, Rounding=0, Callback=function(v) S.MaxPartSize=v end})
+GroupRadius:AddSlider("MaxPartSpeed",  {Text="Max pull speed", Default=S.MaxPartSpeed, Min=100, Max=1000, Rounding=0, Callback=function(v) S.MaxPartSpeed=v end})
+GroupRadius:AddSlider("ClaimSweep",    {Text="Candidates per frame", Default=S.ClaimSweep, Min=1, Max=300, Rounding=0, Callback=function(v) S.ClaimSweep=v end})
+GroupRadius:AddToggle("GhostScanEnabled",  {Text="👻 Ghost scan", Default=S.GhostScanEnabled, Callback=function(v) S.GhostScanEnabled=v end})
+GroupRadius:AddToggle("AntiNDSDamage",     {Text="🛡️ Anti-damage / anti-spin NDS", Default=S.AntiNDSDamage, Callback=function(v) S.AntiNDSDamage=v end})
+GroupRadius:AddToggle("AntiSitEnabled",    {Text="🚫 Auto anti-sit", Default=S.AntiSitEnabled,
+    Callback=function(v)
+        S.AntiSitEnabled=v
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Seated, not v) if v then hum.Sit = false end end
+    end})
+GroupRadius:AddToggle("HarvesterSwarmEnabled", {Text="🦅 Harvester swarm (10 drones)", Default=S.HarvesterSwarmEnabled, Callback=function(v) S.HarvesterSwarmEnabled=v end})
+GroupRadius:AddSlider("HarvesterDroneCount",{Text="Drone count", Default=S.HarvesterDroneCount, Min=1, Max=10, Rounding=0, Callback=function(v) S.HarvesterDroneCount=v end})
+GroupRadius:AddToggle("WhitelistFriends",  {Text="👥 Auto whitelist friends", Default=S.WhitelistFriends, Callback=function(v) S.WhitelistFriends=v end})
+GroupRadius:AddToggle("AutoReclaimRound",  {Text="🔄 Auto reclaim new round", Default=S.AutoReclaimRound, Callback=function(v) S.AutoReclaimRound=v end})
+GroupRadius:AddToggle("AntiStealEnabled",  {Text="🛡️ Anti-steal ownership guard", Default=S.AntiStealEnabled, Callback=function(v) S.AntiStealEnabled=v end})
+GroupRadius:AddSlider("MinAirGap",     {Text="Min body gap", Default=S.MinAirGap, Min=2, Max=20, Rounding=0, Callback=function(v) S.MinAirGap=v end})
+GroupRadius:AddSlider("ClaimBoost",    {Text="Claim radius boost", Default=S.ClaimBoost, Min=1, Max=5, Rounding=1, Callback=function(v) S.ClaimBoost=v end})
+GroupRadius:AddSlider("AntiStealSweep",{Text="Parts defended per frame", Default=S.AntiStealSweep, Min=1, Max=40, Rounding=0, Callback=function(v) S.AntiStealSweep=v end})
+GroupRadius:AddSlider("AntiStealPokes",{Text="Pokes per part", Default=S.AntiStealPokes, Min=1, Max=5, Rounding=0, Callback=function(v) S.AntiStealPokes=v end})
+GroupRadius:AddSlider("AntiStealSample",{Text="Toucher sample count", Default=S.AntiStealSample, Min=1, Max=40, Rounding=0, Callback=function(v) S.AntiStealSample=v end})
+GroupRadius:AddButton({
+    Text = "🔄 Rescan + range diagnostics",
+    Func = function()
+        S.scanCandidateParts() S.farScanParts()
+        local dr = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local nn, nf, np = 0, 0, 0
+        if dr then
+            nn = #S.gatherPartsNearby(dr.Position, S.OwnershipRadius, false)
+            nf = #S.gatherPartsNearby(dr.Position, S.scanRadius(), true)
+        end
+        for _ in pairs(S.pendingCandidateParts) do np = np + 1 end
+        local rb = S.simRadReadback and math.floor(S.simRadReadback) or -1
+        Library:Notify(string.format(
+            "Near %d: %d | Far %d: %d | Pending: %d | Owned: %d | SimRad: %d (readback %d)",
+            math.floor(S.OwnershipRadius), nn, math.floor(S.scanRadius()), nf,
+            np, #S.verifiedOwnedParts, math.floor(S.currentBoostRadius or 0), rb), 8)
+    end,
+})
+
+GroupLife:AddToggle("NeckGuardEnabled", {Text="🧣 Anti-death from neck loss", Default=S.NeckGuardEnabled,
+    Callback=function(v) S.NeckGuardEnabled=v local c = LocalPlayer.Character if v and c then S.applyNeckGuard(c, true) end end})
+GroupLife:AddToggle("RescueEnabled",    {Text="☠️ Refuse death / rescue HP", Default=S.RescueEnabled, Callback=function(v) S.RescueEnabled=v end})
+GroupLife:AddToggle("VoidGuardEnabled", {Text="🕳️ Anti-void fall", Default=S.VoidGuardEnabled, Callback=function(v) S.VoidGuardEnabled=v end})
+GroupLife:AddSlider("HeadGuardRadius",  {Text="Head guard radius", Default=S.HeadGuardRadius, Min=6, Max=40, Rounding=0, Callback=function(v) S.HeadGuardRadius=v end})
+GroupLife:AddButton({
+    Text = "🩺 Show last death cause",
+    Func = function()
+        Library:Notify("LAST: " .. tostring(S.lastDeathInfo or "never died")
+            .. " | Saved: " .. (S.rescueCount or 0) .. " | Void saves: " .. (S.voidSaves or 0), 6)
+    end,
+})
+
+-- ============================================================
+-- 17. TAB: SETTINGS
+-- ============================================================
+GroupRepl:AddToggle("AnimReplEnabled", {Text="🎭 Jutsu animations replicate", Default=S.AnimReplEnabled,
+    Callback=function(v) S.AnimReplEnabled=v if not v then S.stopAllAnimTracks() end end})
+GroupRepl:AddToggle("ChatAnnounceEnabled", {Text="📢 Announce in chat (visible to all)", Default=S.ChatAnnounceEnabled,
+    Callback=function(v) S.ChatAnnounceEnabled=v end})
+GroupRepl:AddToggle("SfxEnabled", {Text="🔊 SFX (you only)", Default=S.SfxEnabled,
+    Callback=function(v) S.SfxEnabled=v if v then S.playSfx("rbxasset://sounds/electronicpingshort.wav", 0.5, 1.2) end end})
+GroupRepl:AddToggle("WeatherUmbrellaEnabled", {Text="☂️ Anti-weather umbrella", Default=S.WeatherUmbrellaEnabled,
+    Callback=function(v)
+        S.WeatherUmbrellaEnabled=v
+        if S.WeatherRoofPart and S.WeatherRoofPart.Parent then
+            S.WeatherRoofPart.CFrame = CFrame.new(0, v and -500 or -900, 0)
+        end
+    end})
+GroupRepl:AddToggle("AutoQualityEnabled", {Text="⚙️ Auto-quality (adaptive FPS)", Default=S.AutoQualityEnabled,
+    Callback=function(v) S.AutoQualityEnabled=v if not v then S.perfPressure=0 end end})
+GroupRepl:AddSlider("OwnershipCheckPerFrame", {Text="Ownership checks per frame", Default=S.OwnershipCheckPerFrame, Min=5, Max=250, Rounding=0, Callback=function(v) S.OwnershipCheckPerFrame=v end})
+GroupRepl:AddSlider("ChatAnnounceCooldown",   {Text="Chat cooldown (s)", Default=S.ChatAnnounceCooldown, Min=3, Max=120, Rounding=0, Callback=function(v) S.ChatAnnounceCooldown=v end})
+GroupRepl:AddSlider("ShowcaseInterval",       {Text="Showcase interval (s)", Default=S.ShowcaseInterval, Min=3, Max=60, Rounding=0, Callback=function(v) S.ShowcaseInterval=v end})
+GroupRepl:AddInput("AnimHoverId", {Text="Anim hover ID (0=auto)", Default=tostring(S.AnimHoverId), Callback=function(v) S.AnimHoverId=math.max(0, math.floor(tonumber(v) or 0)) end})
+GroupRepl:AddInput("AnimDiveId",  {Text="Anim dive ID",  Default=tostring(S.AnimDiveId),  Callback=function(v) S.AnimDiveId =math.max(0, math.floor(tonumber(v) or 0)) end})
+GroupRepl:AddInput("AnimSlashId", {Text="Anim slash ID", Default=tostring(S.AnimSlashId), Callback=function(v) S.AnimSlashId=math.max(0, math.floor(tonumber(v) or 0)) end})
+GroupRepl:AddInput("AnimPalmId",  {Text="Anim palm ID",  Default=tostring(S.AnimPalmId),  Callback=function(v) S.AnimPalmId =math.max(0, math.floor(tonumber(v) or 0)) end})
+GroupRepl:AddInput("AnimPurpleId",{Text="Anim purple ID",Default=tostring(S.AnimPurpleId),Callback=function(v) S.AnimPurpleId=math.max(0, math.floor(tonumber(v) or 0)) end})
+GroupRepl:AddInput("AnimTauntId", {Text="Anim taunt ID", Default=tostring(S.AnimTauntId), Callback=function(v) S.AnimTauntId=math.max(0, math.floor(tonumber(v) or 0)) end})
+GroupRepl:AddButton({
+    Text = "🕺 Show off (dance)",
+    Func = function()
+        S.tauntUntil = tick() + 5
+        S.playSfx("rbxasset://sounds/electronicpingshort.wav", 0.5, 1.4)
+        S.announceToChat("🕺 " .. LocalPlayer.DisplayName .. " is showing off in W7s Blackhole!")
+    end,
+})
+GroupRepl:AddButton({
+    Text = "🎬 Toggle Showcase mode",
+    Func = function()
+        S.ShowcaseActive = not S.ShowcaseActive
+        if S.ShowcaseActive then
+            S.lastShowcaseTick = tick() - math.max(3, S.ShowcaseInterval)
+            S.announceToChat("🎬 " .. LocalPlayer.DisplayName .. " enabled W7s SHOWCASE MODE!", true)
+            S.playSfx("rbxasset://sounds/unsheath.wav", 0.5, 1)
+        else
+            S.stopAnimSlot("showcase")
+            S.announceToChat("🎬 W7s SHOWCASE MODE disabled.", true)
+        end
+    end,
+})
+GroupRepl:AddButton({
+    Text = "⚡ Release all parts (reset)",
+    Func = function()
+        S.releaseAllParts()
+        S.frozenPartPositions = setmetatable({},{__mode="k"})
+        S.stopAllAnimTracks()
+        S.recaptureCount=0 S.lostEventCount=0
+        S.SuperLockActive=false S.HollowPurpleActive=false S.SlashActive=false S.PalmActive=false
+        S.clearBillboards()
+    end,
+})
+
+GroupAntiFling:AddToggle("PartCollideEnabled", {Text="🧊 Parts can collide (⚠️ fling risk)", Default=S.PartCollideEnabled,
+    Callback=function(v)
+        S.PartCollideEnabled=v
+        if not v then
+            for _, p in ipairs(S.verifiedOwnedParts) do if p and p.Parent then pcall(function() p.CanCollide=false end) end end
+        end
+    end})
+GroupAntiFling:AddToggle("AntiFlingEnabled", {Text="🛡️ Anti-fling watchdog", Default=S.AntiFlingEnabled, Callback=function(v) S.AntiFlingEnabled=v end})
+GroupAntiFling:AddToggle("AntiLostEnabled",  {Text="🎯 Anti-lost parts (pull back)", Default=S.AntiLostEnabled, Callback=function(v) S.AntiLostEnabled=v end})
+GroupAntiFling:AddSlider("FlingGuardRadius",     {Text="Safe body radius", Default=S.FlingGuardRadius, Min=2, Max=40, Rounding=0, Callback=function(v) S.FlingGuardRadius=v end})
+GroupAntiFling:AddSlider("JutsuSpin",            {Text="Jutsu part spin", Default=S.JutsuSpin, Min=0, Max=500, Rounding=0, Callback=function(v) S.JutsuSpin=v end})
+GroupAntiFling:AddSlider("FlingMaxSpeed",        {Text="Anti-fling speed cap", Default=S.FlingMaxSpeed, Min=80, Max=2000, Rounding=0, Callback=function(v) S.FlingMaxSpeed=v end})
+GroupAntiFling:AddSlider("FlingCollideMaxSpeed", {Text="No-collide above speed", Default=S.FlingCollideMaxSpeed, Min=50, Max=1000, Rounding=0, Callback=function(v) S.FlingCollideMaxSpeed=v end})
+GroupAntiFling:AddSlider("FlingMaxJump",         {Text="Snap-back jump threshold", Default=S.FlingMaxJump, Min=10, Max=300, Rounding=0, Callback=function(v) S.FlingMaxJump=v end})
+GroupAntiFling:AddSlider("ReturnDistance",       {Text="Part return distance", Default=S.ReturnDistance, Min=40, Max=3000, Rounding=0, Callback=function(v) S.ReturnDistance=v end})
+
+GroupSave:AddButton({Text="💾 Save config",   Func=function() SaveManager:Save() Library:Notify("Saved", 2) end})
+GroupSave:AddButton({Text="📂 Load config",   Func=function() SaveManager:Load() Library:Notify("Loaded", 2) end})
+GroupSave:AddButton({Text="🗑 Delete config", Func=function() SaveManager:Delete() Library:Notify("Deleted", 2) end})
+
+-- ============================================================
+-- 18. THEME + SAVE MANAGER
+-- ============================================================
+ThemeManager:SetLibrary(Library)
+ThemeManager:SetFolder("W7sBlackhole")
+ThemeManager:SetDefaultTheme({
+    FontColor       = Color3.fromRGB(255, 255, 255),
+    MainColor       = Color3.fromRGB(15, 15, 25),
+    AccentColor     = Color3.fromRGB(45, 110, 255),
+    BackgroundColor = Color3.fromRGB(10, 10, 15),
+    OutlineColor    = Color3.fromRGB(35, 35, 45),
+    FontFace        = Enum.Font.Gotham,
+})
+ThemeManager:ApplyToTab(Tabs.Settings)
+
+SaveManager:SetLibrary(Library)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
+SaveManager:SetFolder("W7sBlackhole")
+SaveManager:BuildConfigSection(Tabs.Settings)
+SaveManager:LoadAutoloadConfig()
+
+-- ============================================================
+-- 19. HUD QUICK BUTTONS
+-- ============================================================
+S.ScreenGui = Instance.new("ScreenGui")
+S.ScreenGui.Name = "W7s_HUD_V40"
+S.ScreenGui.ResetOnSpawn = false
+pcall(function() S.ScreenGui.Parent = game:GetService("CoreGui") end)
+if not S.ScreenGui.Parent then S.ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+getgenv().W7sEngineLoaded = S.ScreenGui
+
+S.HUDLayoutEditMode = false
+S.makeDraggable = function(handle, obj, cond)
+    local dragging, ds, sp
+    handle.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+            if cond and not cond() then return end
+            dragging = true ds = inp.Position sp = obj.Position
+            local ec
+            ec = inp.Changed:Connect(function()
+                if inp.UserInputState == Enum.UserInputState.End then
+                    dragging = false if ec then ec:Disconnect() end
+                end
+            end)
+        end
+    end)
+    handle.InputChanged:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch then
+            if dragging then
+                local d = inp.Position - ds
+                obj.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
+            end
+        end
+    end)
+end
+
+-- HUD factory
+local function makeHudBtn(name, col, strokeCol, pos, size, text, textSize, radius)
+    local b = Instance.new("TextButton")
+    b.Name = name b.Parent = S.ScreenGui
+    b.BackgroundColor3 = col b.BackgroundTransparency = 0.25
+    b.Position = pos b.Size = size
+    b.Text = text b.TextColor3 = Color3.fromRGB(255,255,255)
+    b.Font = Enum.Font.GothamBold b.TextSize = textSize
+    b.Visible = false
+    Instance.new("UICorner", b).CornerRadius = radius
+    local s = Instance.new("UIStroke", b)
+    s.Color = strokeCol s.Thickness = 2
+    return b, s
+end
+
+S.QuickLaunchBtn = makeHudBtn("QuickLaunchBtn", Color3.fromRGB(150,40,220), Color3.fromRGB(220,100,255),
+    UDim2.new(0.86,-30,0.65,0), UDim2.new(0,60,0,60), "🎯\nFIRE", 12, UDim.new(1,0))
+S.QuickScanBtn = makeHudBtn("QuickScanBtn", Color3.fromRGB(200,30,60), Color3.fromRGB(255,80,100),
+    UDim2.new(0.86,-30,0.52,0), UDim2.new(0,60,0,50), "🎲\nSCAN", 11, UDim.new(1,10))
+S.QuickSlashBtn = makeHudBtn("QuickSlashBtn", Color3.fromRGB(220,40,90), Color3.fromRGB(255,100,140),
+    UDim2.new(0.86,-30,0.39,0), UDim2.new(0,60,0,50), "⚔️\nSLASH", 11, UDim.new(1,10))
+S.QuickPalmBtn = makeHudBtn("QuickPalmBtn", Color3.fromRGB(220,120,0), Color3.fromRGB(255,180,0),
+    UDim2.new(0.86,-30,0.26,0), UDim2.new(0,60,0,50), "🖐️\nSLAP", 11, UDim.new(1,10))
+S.QuickFlyBtn = makeHudBtn("QuickFlyBtn", Color3.fromRGB(0,160,220), Color3.fromRGB(0,230,255),
+    UDim2.new(0.86,-30,0.13,0), UDim2.new(0,60,0,50), "🚀\nFLY", 11, UDim.new(1,10))
+
+S.makeDraggable(S.QuickLaunchBtn, S.QuickLaunchBtn, function() return S.HUDLayoutEditMode end)
+S.makeDraggable(S.QuickScanBtn,   S.QuickScanBtn,   function() return S.HUDLayoutEditMode end)
+S.makeDraggable(S.QuickSlashBtn,  S.QuickSlashBtn,  function() return S.HUDLayoutEditMode end)
+S.makeDraggable(S.QuickPalmBtn,   S.QuickPalmBtn,   function() return S.HUDLayoutEditMode end)
+S.makeDraggable(S.QuickFlyBtn,    S.QuickFlyBtn,    function() return S.HUDLayoutEditMode end)
+
+S.QuickLaunchBtn.MouseButton1Click:Connect(function() if not S.HUDLayoutEditMode then S.executeTargetAttack() end end)
+S.QuickScanBtn.MouseButton1Click:Connect(function() if not S.HUDLayoutEditMode then S.performRandomScan() end end)
+S.QuickSlashBtn.MouseButton1Click:Connect(function() if not S.HUDLayoutEditMode then S.triggerBladeSlash() end end)
+S.QuickPalmBtn.MouseButton1Click:Connect(function() if not S.HUDLayoutEditMode then S.triggerDivinePalmSmash() end end)
+S.QuickFlyBtn.MouseButton1Click:Connect(function()
+    if S.HUDLayoutEditMode then return end
+    S.NativeFlyActive = not S.NativeFlyActive
+    S.FlyControlsFrame.Visible = S.NativeFlyActive
+    S.QuickFlyBtn.BackgroundColor3 = S.NativeFlyActive and Color3.fromRGB(0,180,120) or Color3.fromRGB(0,160,220)
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if root then S.FlyAltitudeY = root.Position.Y end
+    Library:Notify("Fly: " .. (S.NativeFlyActive and "ON 🚀" or "OFF 🛬"), 3)
+end)
+
+-- Fly controls
+S.FlyControlsFrame = Instance.new("Frame")
+S.FlyControlsFrame.Name = "FlyControlsFrame"
+S.FlyControlsFrame.Parent = S.ScreenGui
+S.FlyControlsFrame.BackgroundTransparency = 1
+S.FlyControlsFrame.Position = UDim2.new(0.78,-30,0.50,0)
+S.FlyControlsFrame.Size = UDim2.new(0,50,0,110)
+S.FlyControlsFrame.Visible = false
+
+S.UpBtn = Instance.new("TextButton", S.FlyControlsFrame)
+S.UpBtn.Size = UDim2.new(1,0,0,50) S.UpBtn.BackgroundColor3 = Color3.fromRGB(0,160,220)
+S.UpBtn.BackgroundTransparency = 0.35 S.UpBtn.Text = "▲\nUP"
+S.UpBtn.TextColor3 = Color3.fromRGB(255,255,255) S.UpBtn.Font = Enum.Font.GothamBold S.UpBtn.TextSize = 12
+Instance.new("UICorner", S.UpBtn).CornerRadius = UDim.new(0,8)
+
+S.DownBtn = Instance.new("TextButton", S.FlyControlsFrame)
+S.DownBtn.Position = UDim2.new(0,0,0,55) S.DownBtn.Size = UDim2.new(1,0,0,50)
+S.DownBtn.BackgroundColor3 = Color3.fromRGB(0,160,220) S.DownBtn.BackgroundTransparency = 0.35
+S.DownBtn.Text = "▼\nDOWN" S.DownBtn.TextColor3 = Color3.fromRGB(255,255,255)
+S.DownBtn.Font = Enum.Font.GothamBold S.DownBtn.TextSize = 12
+Instance.new("UICorner", S.DownBtn).CornerRadius = UDim.new(0,8)
+
+S.UpBtn.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then S.MoveUp = true end end)
+S.UpBtn.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then S.MoveUp = false end end)
+S.DownBtn.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then S.MoveDown = true end end)
+S.DownBtn.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then S.MoveDown = false end end)
+
+-- Bubble (minimize)
+S.Bubble = Instance.new("TextButton")
+S.Bubble.Name = "VoidBubble" S.Bubble.Parent = S.ScreenGui
+S.Bubble.BackgroundColor3 = Color3.fromRGB(18,12,28)
+S.Bubble.Position = UDim2.new(0.04,0,0.50,0) S.Bubble.Size = UDim2.new(0,52,0,52)
+S.Bubble.Text = "🌀" S.Bubble.TextSize = 22 S.Bubble.Visible = false S.Bubble.Active = true
+Instance.new("UICorner", S.Bubble).CornerRadius = UDim.new(1,0)
+local bs = Instance.new("UIStroke", S.Bubble)
+bs.Color = Color3.fromRGB(180,70,255) bs.Thickness = 2.2
+S.makeDraggable(S.Bubble, S.Bubble, function() return true end)
+S.Bubble.MouseButton1Click:Connect(function() end)
+
+-- ============================================================
+-- 20. MAIN HEARTBEAT
+-- ============================================================
+track(RunService.Heartbeat:Connect(function(dt)
+    S.frameCounter = S.frameCounter + 1
+    S.renderSkipParity = S.frameCounter % 2
+    S.fpsAccum = S.fpsAccum + dt S.fpsFrames = S.fpsFrames + 1
+    if S.fpsAccum >= 0.5 then
+        S.hudFps = math.floor((S.fpsFrames / S.fpsAccum) + 0.5)
+        S.fpsAccum = 0 S.fpsFrames = 0
+        if S.AutoQualityEnabled then
+            if S.hudFps < 40 then if S.perfPressure < 3 then S.perfPressure = S.perfPressure + 1 end
+            elseif S.hudFps > 55 then if S.perfPressure > 0 then S.perfPressure = S.perfPressure - 1 end end
+        end
+    end
+    S.updateAnimState()
+
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+
+    S.cachedRoot = root
+    if root and hum then
+        local spd = root.AssemblyLinearVelocity.Magnitude
+        local prev = S.lastCharSpeed or spd
+        if S.AntiFlingEnabled and not S.NativeFlyActive and not S.isPlayerDead then
+            if spd > S.FlingMaxSpeed and (spd - prev) > S.FlingSpikeDelta and spd > 0.05 then
+                local v = root.AssemblyLinearVelocity
+                root.AssemblyLinearVelocity = v.Unit * math.min(spd,
+                    ((spd - prev) > S.FlingSpikeDelta) and math.min(S.FlingMaxSpeed * 0.3, 90) or S.FlingMaxSpeed)
+                root.AssemblyAngularVelocity = Vector3.zero
+                local st = hum:GetState()
+                if st == Enum.HumanoidStateType.Freefall or st == Enum.HumanoidStateType.FallingDown
+                    or st == Enum.HumanoidStateType.PlatformStanding or st == Enum.HumanoidStateType.Ragdoll then
+                    hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                end
+                S.flingEvents = S.flingEvents + 1
+                if tick() - (S.lastFlingToast or 0) > 3 then
+                    S.lastFlingToast = tick()
+                    Library:Notify("Fling blocked! #" .. S.flingEvents, 3)
+                end
+            end
+        end
+        S.antiFlingSnapBack(root, hum, spd)
+        local av = root.AssemblyAngularVelocity
+        if S.AntiFlingEnabled and not S.NativeFlyActive and not S.isPlayerDead
+            and av.Magnitude > S.FlingMaxAngular and av.Magnitude > 0.05 then
+            root.AssemblyAngularVelocity = av.Unit * S.FlingMaxAngular
+        end
+        S.lastCharSpeed = root.AssemblyLinearVelocity.Magnitude
+    end
+
+    -- Native fly
+    if char and root and hum and not S.isPlayerDead then
+        if S.NativeFlyActive then
+            if not S.FlyAltitudeY then S.FlyAltitudeY = root.Position.Y end
+            local cam = workspace.CurrentCamera
+            local cc = cam.CFrame
+            local ff = Vector3.new(cc.LookVector.X, 0, cc.LookVector.Z)
+            if ff.Magnitude < 0.05 then ff = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z) end
+            if ff.Magnitude < 0.05 then ff = Vector3.new(0,0,-1) end
+            ff = ff.Unit
+            local md = hum.MoveDirection
+            local mv = md.Magnitude > 0.05
+            local v = 0
+            if S.MoveUp or UserInputService:IsKeyDown(Enum.KeyCode.Space) then v = v + 1 end
+            if S.MoveDown or UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then v = v - 1 end
+            S.FlyAltitudeY = S.FlyAltitudeY + (v * S.NativeFlySpeed * dt)
+            S.FlyAltitudeY = math.max(S.FlyAltitudeY, S.voidGuardY())
+            local nhp = root.Position + (md * S.NativeFlySpeed * dt)
+            local tp = Vector3.new(nhp.X, S.FlyAltitudeY, nhp.Z)
+            if S.AnimeGodAnimEnabled then
+                if mv then
+                    local fl = (md.Magnitude > 0) and md.Unit or ff
+                    local tilt = S.AnimReplEnabled and -35 or -65
+                    root.CFrame = CFrame.lookAt(tp, tp + fl) * CFrame.Angles(math.rad(tilt), 0, 0)
+                else
+                    local wv = math.sin(tick() * 3) * 0.03
+                    S.FlyAltitudeY = S.FlyAltitudeY + wv
+                    root.CFrame = CFrame.lookAt(tp, tp + ff)
+                end
+            else
+                root.CFrame = CFrame.new(tp) * root.CFrame.Rotation
+            end
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+        end
+        if S.WeatherUmbrellaEnabled and S.WeatherRoofPart and S.WeatherRoofPart.Parent and root then
+            S.WeatherRoofPart.CFrame = CFrame.new(root.Position + Vector3.new(0, 9, 0))
+        end
+        if S.AntiNDSDamage and not S.NativeFlyActive then
+            local hg = root:FindFirstChildOfClass("BodyGyro") or root:FindFirstChildOfClass("AlignOrientation")
+            if not hg then
+                root.AssemblyAngularVelocity = Vector3.zero
+            elseif root.AssemblyAngularVelocity.Magnitude > 30 then
+                root.AssemblyAngularVelocity = root.AssemblyAngularVelocity.Unit * 30
+            end
+            if not hg and root.AssemblyLinearVelocity.Y < -42 then
+                root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, -42, root.AssemblyLinearVelocity.Z)
+            end
+            if not S.humanoidStatesDisabled[hum] then
+                S.humanoidStatesDisabled[hum] = true
+                hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+            end
+        end
+        if S.AntiSitEnabled and hum.Sit then hum.Sit = false hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+    end
+
+    S.guardAccum = (S.guardAccum or 0) + dt
+    if S.guardAccum > 0.25 then
+        S.guardAccum = 0
+        S.deathGuardTick(root, hum)
+    end
+
+    if not S.EngineActive then return end
+
+    if not S.isPlayerDead and (tick() - S.lastScanTime > 1.5) then
+        S.lastScanTime = tick()
+        S.scanCandidateParts()
+        if tick() - (S.lastFarScanTime or 0) > (S.FarScanInterval or 2.5) then
+            S.lastFarScanTime = tick()
+            S.farScanParts()
+        end
+    end
+    if S.GhostScanEnabled and not S.isPlayerDead and root then
+        if (tick() - S.ghostScanTime > math.max(1, S.GhostScanInterval)) or #S.ghostSnapshot == 0 then
+            S.ghostScanTime = tick()
+            local ok, snap = pcall(function() return workspace:GetDescendants() end)
+            if ok and snap and #snap > 0 then S.ghostSnapshot = snap S.ghostIdx = 1 end
+        end
+        if #S.ghostSnapshot > 0 then S.ghostScanSweep(root.Position) end
+    end
+
+    -- Drones
+    local drones = {}
+    if S.HarvesterSwarmEnabled and #S.verifiedOwnedParts > 0 then
+        local tot = math.min(#S.verifiedOwnedParts, S.HarvesterDroneCount)
+        for d = 1, tot do
+            local pick = ((S.harvesterDroneIdx + d - 2) % #S.verifiedOwnedParts) + 1
+            table.insert(drones, S.verifiedOwnedParts[pick])
+        end
+        S.harvesterDroneIdx = ((S.harvesterDroneIdx + tot - 1) % #S.verifiedOwnedParts) + 1
+    end
+
+    -- Claim loop
+    table.clear(S.pendingKeys)
+    for p in pairs(S.pendingCandidateParts) do table.insert(S.pendingKeys, p) end
+    local pc = #S.pendingKeys
+    local di = 1
+    local sb = math.max(1, S.ClaimSweep)
+    if S.perfPressure >= 2 then sb = math.max(8, math.floor(sb * 0.5)) end
+    local qm = math.clamp(S.PartQuota, 1, 1000)
+    local sw = 0
+    if pc > 0 then
+        for i = 1, pc do
+            if sw >= sb then break end
+            sw = sw + 1
+            local pi = ((S.pendingIdx + i - 2) % pc) + 1
+            local p = S.pendingKeys[pi]
+            if p and p.Parent and not p.Anchored and p.AssemblyRootPart and not p.AssemblyRootPart.Anchored then
+                local dr = nil
+                if #drones > 0 then
+                    dr = drones[di]
+                    if #drones > 1 then
+                        local sn = math.min(#drones, 8)
+                        local bd = math.huge
+                        for s = 1, sn do
+                            local c = drones[((di + s - 2) % #drones) + 1]
+                            if c and c.Parent then
+                                local d = (c.Position - p.Position).Magnitude
+                                if d < bd then bd = d dr = c end
+                            end
+                        end
+                    end
+                    di = (di % #drones) + 1
+                end
+                pcall(function()
+                    if dr then firetouchinterest(dr, p, 0) firetouchinterest(dr, p, 1) end
+                    p.AssemblyLinearVelocity = Vector3.new(0, 0.25, 0)
+                end)
+                local owned = false
+                pcall(function() if isnetworkowner then owned = isnetworkowner(p) end end)
+                if owned then
+                    S.pendingCandidateParts[p] = nil
+                    if #S.verifiedOwnedParts < qm and not S.verifiedSet[p] then
+                        S.verifiedSet[p] = true
+                        table.insert(S.verifiedOwnedParts, p)
+                        p.CanCollide = false
+                        S.disablePartSensors(p)
+                        if tick() - S.lastClaimSfxTick > 1.2 then
+                            S.lastClaimSfxTick = tick()
+                            S.playSfx("rbxasset://sounds/electronicpingshort.wav", 0.3, 1.7)
+                        end
+                    end
+                end
+            else
+                S.pendingCandidateParts[p] = nil
+            end
+        end
+        S.pendingIdx = ((S.pendingIdx + sw - 1) % math.max(pc, 1)) + 1
+    else
+        S.pendingIdx = 1
+    end
+
+    -- Demoter
+    local cb = math.max(5, S.OwnershipCheckPerFrame)
+    if S.perfPressure >= 2 then cb = math.max(4, math.floor(cb * 0.5)) end
+    local cc = 0
+    while cc < cb and #S.verifiedOwnedParts > 0 do
+        if S.demoteIdx > #S.verifiedOwnedParts then S.demoteIdx = 1 end
+        local p = S.verifiedOwnedParts[S.demoteIdx]
+        cc = cc + 1
+        if not (p and p.Parent and not p.Anchored and p.AssemblyRootPart and not p.AssemblyRootPart.Anchored) then
+            S.clearSelfImmunity(p) S.verifiedSet[p]=nil S.sensorState[p]=nil S.activeHomingParts[p]=nil
+            table.remove(S.verifiedOwnedParts, S.demoteIdx)
+            if S.demoteIdx > #S.verifiedOwnedParts then S.demoteIdx = 1 end
+        else
+            local so = true
+            pcall(function() if isnetworkowner then so = isnetworkowner(p) end end)
+            if so then
+                S.demoteIdx = S.demoteIdx + 1
+            else
+                S.clearSelfImmunity(p) S.verifiedSet[p]=nil S.sensorState[p]=nil S.activeHomingParts[p]=nil
+                table.remove(S.verifiedOwnedParts, S.demoteIdx)
+                S.enablePartSensors(p)
+                S.pendingCandidateParts[p] = tick()
+                S.markStolen(p)
+                if S.demoteIdx > #S.verifiedOwnedParts then S.demoteIdx = 1 end
+            end
+        end
+    end
+
+    -- Anti-steal
+    if S.AntiStealEnabled and #S.verifiedOwnedParts > 0 and #S.stolenList > 0 then
+        local bg = math.max(1, S.AntiStealSweep)
+        local pr = 0
+        local gi = S.stolenIdx
+        while pr < bg and #S.stolenList > 0 do
+            if gi > #S.stolenList then gi = 1 end
+            local sp = S.stolenList[gi]
+            pr = pr + 1
+            local drop = false
+            if not (sp and sp.Parent and not sp.Anchored) then
+                drop = true
+            else
+                S.attemptReclaim(sp)
+                local on = false
+                pcall(function() if isnetworkowner then on = isnetworkowner(sp) end end)
+                if on then
+                    S.recaptureCount = S.recaptureCount + 1
+                    S.pendingCandidateParts[sp] = tick()
+                    drop = true
+                end
+            end
+            if drop then
+                if sp then S.stolenSet[sp] = nil end
+                local li = #S.stolenList
+                S.stolenList[gi] = S.stolenList[li] S.stolenList[li] = nil
+                if gi > #S.stolenList then gi = 1 end
+            else
+                gi = gi + 1
+            end
+        end
+        S.stolenIdx = gi
+    end
+
+    S.hudUpdateAccum = S.hudUpdateAccum + dt
+    if S.hudUpdateAccum > 0.25 then
+        S.hudUpdateAccum = 0
+        S.checkStuckOwnership()
+    end
+
+    for bi = #S.activeBillboards, 1, -1 do
+        local bb = S.activeBillboards[bi]
+        if not (bb and bb.Parent and bb.Adornee and bb.Adornee.Parent) then
+            if bb and bb.Parent then bb:Destroy() end
+            table.remove(S.activeBillboards, bi)
+        else
+            local th = bb.Adornee.Parent:FindFirstChildOfClass("Humanoid")
+            if th and th.Health <= 0 then bb:Destroy() table.remove(S.activeBillboards, bi) end
+        end
+    end
+
+    if S.AutoRandomScan and not S.isPlayerDead and (tick() - S.lastAutoRandomTick > 3.0) then
+        S.lastAutoRandomTick = tick()
+        S.performRandomScan()
+    end
+    if S.ShowcaseActive and not S.isPlayerDead then
+        if tick() - S.lastShowcaseTick > math.max(3, S.ShowcaseInterval) then
+            S.lastShowcaseTick = tick()
+            S.CurrentFormation = (S.CurrentFormation % #S.FormationNames) + 1
+            Library:Notify("Showcase: " .. S.FormationNames[S.CurrentFormation]
+                .. " (" .. S.CurrentFormation .. "/" .. #S.FormationNames .. ")", 3)
+            S.playSfx("rbxasset://sounds/electronicpingshort.wav", 0.45, 1.3)
+            S.announceToChat("🌀 W7s SHOWCASE: " .. S.FormationNames[S.CurrentFormation] .. "!")
+        end
+    end
+
+    -- Center
+    if S.CenterMode == 2 and (not S.CenterTargetPlayer or not S.CenterTargetPlayer.Parent) then
+        S.CenterMode = 1 S.centerCF = nil S.CenterTargetPlayer = nil S.CenterTargetName = ""
+        Library:Notify("Center player left — back to you", 3)
+    end
+    local cpr = nil
+    if S.CenterMode == 2 and S.CenterTargetPlayer then cpr = S.getCenterTargetRoot() end
+    if root and cpr and S.CenterAutoChase and not S.NativeFlyActive and not S.isPlayerDead then
+        local g = (cpr.Position - root.Position).Magnitude
+        if g > S.CenterChaseDist then S.centerChasing = true
+        elseif g < S.CenterChaseStop then S.centerChasing = false end
+        if S.centerChasing and (tick() - S.lastChaseTick > 0.2) then
+            S.lastChaseTick = tick()
+            local ch = root.Parent and root.Parent:FindFirstChildOfClass("Humanoid")
+            if ch then ch:MoveTo(Vector3.new(cpr.Position.X, root.Position.Y, cpr.Position.Z)) end
+        end
+    else
+        S.centerChasing = false
+    end
+
+    local total = #S.verifiedOwnedParts
+    if total == 0 then return end
+
+    if S.isPlayerDead then
+        for _, p in ipairs(S.verifiedOwnedParts) do
+            if p and p.Parent and not p.Anchored and S.frozenPartPositions[p] then
+                p.CFrame = S.frozenPartPositions[p]
+                p.AssemblyLinearVelocity = Vector3.zero
+                p.AssemblyAngularVelocity = Vector3.zero
+            end
+        end
+        return
+    end
+
+    if S.SuperLockActive and S.SuperLockTarget then
+        if not S.SuperLockTarget.Parent then
+            S.SuperLockActive = false S.SuperLockTarget = nil
+            Library:Notify("Target rage-quit! 🏆", 4) S.clearBillboards()
+        else
+            local tc = S.SuperLockTarget.Character
+            local th = tc and tc:FindFirstChildOfClass("Humanoid")
+            local tr = tc and tc:FindFirstChild("HumanoidRootPart")
+            if th and tr and th.Health > 0 then
+                local cn = 0
+                for _, inf in pairs(S.activeHomingParts) do if inf.TargetPlayer == S.SuperLockTarget then cn = cn + 1 end end
+                if cn < S.LaunchAmmoCount then S.executeTargetAttack() end
+            else
+                for p, inf in pairs(S.activeHomingParts) do if inf.TargetPlayer == S.SuperLockTarget then S.activeHomingParts[p] = nil end end
+            end
+        end
+    end
+
+    if S.HollowPurpleActive and root then
+        local el = tick() - S.HollowPurpleStart
+        if el < 0.8 then
+            S.HollowPurpleState = 1
+            local cam = workspace.CurrentCamera
+            S.HollowPurpleDir = cam.CFrame.LookVector
+            S.HollowPurplePos = root.Position + (S.HollowPurpleDir * 5.0) + Vector3.new(0, 1.2, 0)
+        elseif el < 2.2 then
+            S.HollowPurpleState = 2
+            S.HollowPurplePos = S.HollowPurplePos + (S.HollowPurpleDir * 250 * dt)
+        else
+            S.HollowPurpleActive = false S.HollowPurpleState = 0
+            Library:Notify("Purple blast complete! 💥", 3)
+        end
+    end
+
+    local slashProgress = 0
+    if S.SlashActive then
+        local se = tick() - S.SlashStartTime
+        if se < 0.22 then S.SlashPhase = 1 slashProgress = 0
+        elseif se < 0.55 then
+            S.SlashPhase = 2
+            local n = (se - 0.22) / 0.33
+            slashProgress = n * n * n
+        else S.SlashPhase = 3 S.SlashActive = false end
+    end
+    if S.PalmActive then
+        local pe = tick() - S.PalmStartTime
+        if not S.PalmTargetRoot or not S.PalmTargetRoot.Parent then S.PalmActive=false S.PalmPhase=0
+        elseif pe < 0.25 then S.PalmPhase = 1
+        elseif pe < 0.40 then S.PalmPhase = 2
+        elseif pe < 0.60 then S.PalmPhase = 3
+        elseif pe < 0.70 then S.PalmPhase = 4
+        elseif pe < 1.05 then S.PalmPhase = 5
+        else S.PalmActive=false S.PalmPhase=0 Library:Notify("Smash complete! 🖐️✨", 3) end
+    end
+    if S.OrbitSpeed > 0 then
+        S.orbitAngle = (S.orbitAngle + (S.OrbitSpeed * dt)) % (2 * math.pi)
+    end
+
+    local charSpeed = root.AssemblyLinearVelocity.Magnitude
+    local charVel = root.AssemblyLinearVelocity
+    local pivotRoot = cpr or root
+    local leadOffset = Vector3.zero
+    if pivotRoot == root then
+        if charSpeed > 20 and not S.NativeFlyActive then leadOffset = charVel * (dt * 1.35) end
+    else
+        local pv = pivotRoot.AssemblyLinearVelocity
+        if pv.Magnitude > 4 then leadOffset = pv * dt end
+    end
+    local wantC = (pivotRoot.CFrame * CFrame.new(S.OrbitOffsetX, S.OrbitHeight, S.OrbitOffsetZ)) + leadOffset
+    local baseC
+    if pivotRoot == root then
+        baseC = wantC S.centerCF = wantC
+    else
+        if not S.centerCF then S.centerCF = root.CFrame * CFrame.new(S.OrbitOffsetX, S.OrbitHeight, S.OrbitOffsetZ) end
+        S.centerCF = S.centerCF:Lerp(wantC, math.clamp((S.CenterFollowSpeed or 7) * dt, 0, 1))
+        baseC = S.centerCF
+    end
+    local rot3D = CFrame.Angles(math.rad(S.RotationX), math.rad(S.RotationY), math.rad(S.RotationZ))
+    local center = baseC.Position
+    local cam = workspace.CurrentCamera
+    local ld = cam.CFrame.LookVector
+    local flk = Vector3.new(ld.X, 0, ld.Z)
+    if flk.Magnitude < 0.05 then flk = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z) end
+    if flk.Magnitude < 0.05 then flk = Vector3.new(0,0,-1) end
+    local fwdCF = CFrame.lookAt(root.Position, root.Position + flk.Unit)
+
+    local eff = S.PullStrength
+    if charSpeed > 30 and not S.NativeFlyActive then eff = math.max(S.PullStrength, charSpeed * 0.45) end
+    local safeR = math.max(S.OrbitRadius, S.MinAirGap)
+    S.immunityUsedThisFrame = 0
+    S.strikeSensors = (S.SlashActive and S.SlashPhase == 2)
+        or (S.PalmActive and (S.PalmPhase == 2 or S.PalmPhase == 3))
+        or (S.HollowPurpleActive and S.HollowPurpleState == 2)
+        or false
+
+    for i, part in ipairs(S.verifiedOwnedParts) do
+        if part and part.Parent and not part.Anchored then
+            if part.Position.Y < 8 and (root.Position.Y - part.Position.Y) > 12 then
+                part.CFrame = CFrame.new(part.Position.X, root.Position.Y + 15, part.Position.Z)
+                part.AssemblyLinearVelocity = Vector3.zero
+                part.AssemblyAngularVelocity = Vector3.zero
+            end
+            if S.AntiLostEnabled then
+                local away = (part.Position - center).Magnitude
+                if away > S.lostReturnDist() then
+                    local ang = i * (2 * math.pi / math.max(total, 1))
+                    local bp = center + Vector3.new(math.cos(ang), 0, math.sin(ang)) * math.min(safeR, 20)
+                    part.CFrame = CFrame.new(bp)
+                    part.AssemblyLinearVelocity = Vector3.zero
+                    part.AssemblyAngularVelocity = Vector3.zero
+                    S.returnedCount = S.returnedCount + 1
+                end
+            end
+
+            if S.HollowPurpleActive then
+                local cp = part.Position
+                local tp = S.HollowPurplePos
+                local la = math.clamp(eff * dt, 0.1, 1)
+                if S.HollowPurpleState == 1 then
+                    local ang = (S.orbitAngle * 4) + (i * (2 * math.pi / total))
+                    local tr = 1.5 + math.sin(tick() * 15 + i) * 0.4
+                    tp = S.HollowPurplePos + Vector3.new(math.cos(ang) * tr, math.sin(ang) * tr, math.sin(ang) * 0.5)
+                    part.CanCollide = false
+                elseif S.HollowPurpleState == 2 then
+                    local ang = (S.orbitAngle * 6) + (i * (2 * math.pi / total))
+                    tp = S.HollowPurplePos + Vector3.new(math.cos(ang) * 2.5, math.sin(ang) * 2.5, 0)
+                    S.setPartCollide(part, true, S.PartNoclipAttack)
+                    part.AssemblyAngularVelocity = S.spinVec(1)
+                end
+                local np = cp:Lerp(tp, la)
+                part.CFrame = CFrame.new(np) * part.CFrame.Rotation
+                part.AssemblyLinearVelocity = (np - cp) / math.max(dt, 0.016)
+
+            elseif S.PalmActive and S.PalmTargetRoot and S.PalmTargetRoot.Parent then
+                local cp = part.Position
+                local tPos = S.PalmTargetRoot.Position
+                local sf = S.HandScale / 30
+                local ptp = part.Position
+                local fi = i % 5
+                local pr = i / total
+                local fs = (fi - 2) * (5.5 * sf)
+                local fl = (8 + (fi == 2 and 4 or 0)) * sf
+                if S.PalmPhase == 1 then
+                    ptp = tPos + Vector3.new(fs, 22 * sf + (pr * 3), (pr * fl))
+                    part.CanCollide = false
+                elseif S.PalmPhase == 2 then
+                    ptp = tPos + Vector3.new(fs, 1.2 + (pr * 2), (pr * fl))
+                    S.setPartCollide(part, true, S.PartNoclipAttack)
+                    part.AssemblyAngularVelocity = S.spinVec(1)
+                elseif S.PalmPhase == 3 then
+                    ptp = tPos + Vector3.new(fs, 32 * sf, -(pr * fl))
+                    S.setPartCollide(part, true, S.PartNoclipAttack)
+                    part.AssemblyAngularVelocity = S.spinVec(1.5)
+                elseif S.PalmPhase == 4 then
+                    ptp = tPos + Vector3.new(fs, 30 * sf, 0) part.CanCollide = false
+                elseif S.PalmPhase == 5 then
+                    local a = (tick() - S.PalmStartTime - 0.70) / 0.35
+                    ptp = center:Lerp(tPos + Vector3.new(fs, 15, 0), 1 - a)
+                    part.CanCollide = false
+                end
+                local la = math.clamp(S.PullStrength * 2.5 * dt, 0.15, 1)
+                local np = cp:Lerp(ptp, la)
+                part.CFrame = CFrame.new(np) * part.CFrame.Rotation
+                part.AssemblyLinearVelocity = (np - cp) / math.max(dt, 0.016)
+
+            elseif S.BladeSlashMode then
+                local pr = i / total
+                local bd = pr * S.BladeLength
+                local btp
+                if S.SlashActive then
+                    if S.SlashPhase == 1 then
+                        local wa = math.rad(55)
+                        local wx = math.cos(wa) * bd + 3.5
+                        local wy = math.sin(wa) * bd + 4.5
+                        btp = (fwdCF * CFrame.new(wx, wy, 2.5)).Position
+                        part.CanCollide = false
+                    elseif S.SlashPhase == 2 then
+                        local sa = math.rad(100 - (slashProgress * 200))
+                        local sx = math.cos(sa) * bd
+                        local sz = -math.sin(sa) * bd
+                        btp = (fwdCF * CFrame.new(sx, 1.5, sz)).Position
+                        S.setPartCollide(part, true, S.PartNoclipAttack)
+                        part.AssemblyAngularVelocity = S.spinVec(1.5)
+                    end
+                else
+                    local co = ((i % 2 == 0) and 1 or -1) * 1.2
+                    btp = (fwdCF * CFrame.new(3.5 + co, 2.0 + bd * 0.85, -bd * 0.45)).Position
+                    part.CanCollide = false
+                end
+                if btp then
+                    local cp = part.Position
+                    local la = math.clamp(eff * 2.2 * dt, 0.15, 1)
+                    local np = cp:Lerp(btp, la)
+                    part.CFrame = CFrame.lookAt(np, np + fwdCF.LookVector)
+                    part.AssemblyLinearVelocity = (np - cp) / math.max(dt, 0.016)
+                end
+
+            elseif S.activeHomingParts[part] then
+                local info = S.activeHomingParts[part]
+                local tg = info.Target
+                if tg and tg.Parent then
+                    local el = tick() - info.StartTime
+                    local dt2 = (tg.Position - part.Position).Magnitude
+                    local tfi = (tg.Position - info.TargetInitialPos).Magnitude
+                    if info.Phase == 1 and el < 0.45 then
+                        local sp = (fwdCF * CFrame.new(info.StagingOffset)).Position
+                        local j = Vector3.new(math.sin(tick() * 35 + i) * 0.12, math.cos(tick() * 35 + i) * 0.12, 0)
+                        local st = sp + j
+                        local np = part.Position:Lerp(st, math.clamp(eff * 1.5 * dt, 0.15, 1))
+                        local la = tg.Position
+                        if (la - np).Magnitude < 0.08 then la = np + fwdCF.LookVector end
+                        part.CFrame = CFrame.lookAt(np, la)
+                        part.AssemblyLinearVelocity = (np - part.Position) / math.max(dt, 0.016)
+                        part.CanCollide = false
+                    else
+                        info.Phase = 2
+                        local to = math.max(3.5, (tfi / math.max(S.LaunchSpeed, 50)) * 1.6)
+                        if tfi >= S.RecallThreshold or el > to then
+                            S.activeHomingParts[part] = nil
+                            part.CanCollide = false
+                            S.disablePartSensors(part)
+                        else
+                            local d = tg.Position - part.Position
+                            if d.Magnitude > 0.05 then part.AssemblyLinearVelocity = d.Unit * S.LaunchSpeed end
+                            local sol = S.PartNoclipAttack and S.WallPierceDist or 5
+                            if dt2 > sol then
+                                part.CanCollide = false
+                                info.Pierced = nil
+                            else
+                                S.setPartCollide(part, true, S.PartNoclipAttack)
+                                S.enablePartSensors(part)
+                                if S.PartNoclipAttack and S.WallPierceTeleport and not info.Pierced and d.Magnitude > 0.05 then
+                                    info.Pierced = true
+                                    local pp = tg.Position + d.Unit * 2.5
+                                    part.CFrame = CFrame.lookAt(pp, pp - d.Unit)
+                                    part.AssemblyLinearVelocity = -d.Unit * math.max(S.LaunchSpeed, 80)
+                                end
+                            end
+                            if dt2 < 4 and S.AutoAmplifyTorque then
+                                part.AssemblyAngularVelocity = S.spinVec(1.5)
+                            else
+                                part.AssemblyAngularVelocity = Vector3.new(300, 300, 300)
+                            end
+                        end
+                    end
+                else
+                    S.activeHomingParts[part] = nil
+                    part.CanCollide = false
+                    S.disablePartSensors(part)
+                end
+
+            else
+                -- ORBIT FORMATION
+                part.CanCollide = false
+                local lo = Vector3.zero
+                local t = (i / total) * (2 * math.pi)
+                local f = S.CurrentFormation
+
+                if f == 1 then
+                    local a = S.orbitAngle + t
+                    lo = Vector3.new(math.cos(a) * safeR, 0, math.sin(a) * safeR)
+                elseif f == 2 then
+                    local a = S.orbitAngle + t
+                    local h = -4 + ((i / total) * 12)
+                    local r = safeR * 0.4 + ((i / total) * safeR * 0.8)
+                    lo = Vector3.new(math.cos(a) * r, h, math.sin(a) * r)
+                elseif f == 3 then
+                    local phi = math.acos(-1 + (2 * i - 1) / total)
+                    local th = math.sqrt(total * math.pi) * phi + S.orbitAngle
+                    lo = Vector3.new(safeR * math.cos(th) * math.sin(phi), safeR * math.cos(phi), safeR * math.sin(th) * math.sin(phi))
+                elseif f == 4 then
+                    local a = S.orbitAngle * 2 + t
+                    local tr = 2.5 + math.sin(tick() * 10 + i) * 0.8
+                    lo = Vector3.new(math.cos(a) * tr, math.sin(a) * tr, -12 + math.sin(a) * 1.5)
+                elseif f == 5 then
+                    local a = t
+                    local s = safeR / 16
+                    local x = (16 * math.sin(a)^3) * s
+                    local y = (13 * math.cos(a) - 5 * math.cos(2*a) - 2 * math.cos(3*a) - math.cos(4*a)) * s
+                    lo = Vector3.new(x, y, -12)
+                elseif f == 6 then
+                    local oi = (i % 4) + 1
+                    local raw = {
+                        Vector3.new(-7.0, 5.5, S.SatelliteDist), Vector3.new(7.0, 5.5, S.SatelliteDist),
+                        Vector3.new(-8.0, 1.8, S.SatelliteDist), Vector3.new(8.0, 1.8, S.SatelliteDist)
+                    }
+                    local a = (S.orbitAngle * 2.5) + (i * (math.pi / 2))
+                    local tw = (root.CFrame * CFrame.new(S.OrbitOffsetX, S.OrbitHeight, S.OrbitOffsetZ)
+                        * rot3D * CFrame.new(raw[oi] + Vector3.new(math.cos(a) * 2.2, math.sin(a) * 2.2, math.sin(a) * 0.8))).Position
+                    local cp = part.Position
+                    local np = cp:Lerp(tw, math.clamp(S.PullStrength * dt, 0.05, 1))
+                    part.CFrame = CFrame.new(np) * part.CFrame.Rotation
+                    part.AssemblyLinearVelocity = (np - cp) / math.max(dt, 0.016)
+                    part.AssemblyAngularVelocity = S.LethalTorque and Vector3.new(200,200,200) or Vector3.zero
+                    goto continue
+                elseif f == 7 then
+                    local tl = math.rad(35)
+                    local a = S.orbitAngle + t
+                    local rx = math.cos(a) * safeR
+                    local rz = math.sin(a) * safeR
+                    lo = Vector3.new(rx, rz * math.sin(tl), rz * math.cos(tl))
+                elseif f == 8 then
+                    local cols = 5
+                    local col = (i - 1) % cols
+                    local row = math.floor((i - 1) / cols)
+                    lo = Vector3.new((col - (cols - 1) / 2) * 2.5, (row - 1.5) * 2.5 + 1, -safeR * 0.8)
+                elseif f == 9 then
+                    local a = S.orbitAngle + t
+                    local den = 1 + math.sin(a)^2
+                    lo = Vector3.new((safeR * math.cos(a)) / den, 0, (safeR * math.sin(a) * math.cos(a)) / den)
+                elseif f == 10 then
+                    local a = S.orbitAngle + t
+                    local sr = safeR * (0.65 + 0.35 * math.cos(5 * a))
+                    lo = Vector3.new(math.cos(a) * sr, 0, math.sin(a) * sr)
+                elseif f == 11 then
+                    local as = math.pi * 1.25
+                    local aa = -as/2 + ((i / total) * as)
+                    local hr = 4.5
+                    local wy = math.sin(tick() * 3 + i) * 0.25
+                    local hx = math.sin(aa) * hr
+                    local hy = math.cos(aa) * hr + 2.0 + wy
+                    local tw = (root.CFrame * CFrame.new(S.OrbitOffsetX, S.OrbitHeight, S.OrbitOffsetZ)
+                        * rot3D * CFrame.new(hx, hy, S.SatelliteDist * 0.7)).Position
+                    local cp = part.Position
+                    local np = cp:Lerp(tw, math.clamp(S.PullStrength * dt, 0.05, 1))
+                    part.CFrame = CFrame.new(np) * part.CFrame.Rotation
+                    part.AssemblyLinearVelocity = (np - cp) / math.max(dt, 0.016)
+                    part.AssemblyAngularVelocity = S.LethalTorque and Vector3.new(200,200,200) or Vector3.zero
+                    goto continue
+                elseif f == 12 then
+                    local arm = (i % 2 == 0) and 0 or math.pi
+                    local pr = i / total
+                    local sr = 4 + (pr * safeR)
+                    local a = S.orbitAngle + (pr * math.pi * 3) + arm
+                    lo = Vector3.new(math.cos(a) * sr, math.sin(pr * 4) * 1.5, math.sin(a) * sr)
+                elseif f == 13 then
+                    local a = S.orbitAngle + t
+                    lo = Vector3.new(math.cos(a) * 3.5, 4.2, math.sin(a) * 3.5)
+                elseif f == 14 then
+                    local st = (i % 2 == 0) and 0 or math.pi
+                    local pr = ((i / total) * 2 - 1)
+                    local hy = pr * (safeR * 0.6)
+                    local a = (S.orbitAngle * 1.5) + (pr * math.pi * 4) + st
+                    lo = Vector3.new(math.cos(a) * 4.0, hy, math.sin(a) * 4.0)
+                elseif f == 15 then
+                    local isLeft = (i <= total / 2)
+                    local ht = math.max(math.floor(total / 2), 1)
+                    local si = isLeft and i or (i - ht)
+                    local pr = (si / ht)
+                    local flp = math.sin(tick() * 4) * 0.25
+                    local wx = (isLeft and -2.2 or 2.2) + (isLeft and -1 or 1) * (pr * safeR * 0.8)
+                    local wy = 1.8 + (pr * 4.5) - (pr^2 * 2.0)
+                    local wz = S.SatelliteDist * 0.75 + (pr * 3.5 * flp)
+                    local tw = (root.CFrame * CFrame.new(S.OrbitOffsetX, S.OrbitHeight, S.OrbitOffsetZ)
+                        * rot3D * CFrame.new(wx, wy, wz)).Position
+                    local cp = part.Position
+                    local np = cp:Lerp(tw, math.clamp(S.PullStrength * dt, 0.05, 1))
+                    part.CFrame = CFrame.new(np) * part.CFrame.Rotation
+                    part.AssemblyLinearVelocity = (np - cp) / math.max(dt, 0.016)
+                    part.AssemblyAngularVelocity = S.LethalTorque and Vector3.new(200,200,200) or Vector3.zero
+                    goto continue
+                elseif f == 16 then
+                    local a = S.orbitAngle + t
+                    local rr = safeR * 0.7
+                    local rx = math.cos(a) * rr
+                    local ry = math.sin(a) * rr + 2.5
+                    local tw = (root.CFrame * CFrame.new(S.OrbitOffsetX, S.OrbitHeight, S.OrbitOffsetZ)
+                        * rot3D * CFrame.new(rx, ry, S.SatelliteDist * 0.7)).Position
+                    local cp = part.Position
+                    local np = cp:Lerp(tw, math.clamp(S.PullStrength * dt, 0.05, 1))
+                    part.CFrame = CFrame.new(np) * part.CFrame.Rotation
+                    part.AssemblyLinearVelocity = (np - cp) / math.max(dt, 0.016)
+                    part.AssemblyAngularVelocity = S.LethalTorque and Vector3.new(200,200,200) or Vector3.zero
+                    goto continue
+                elseif f == 17 then
+                    local isOne = (i % 2 == 0)
+                    local a = S.orbitAngle + t
+                    if isOne then
+                        lo = Vector3.new(math.cos(a) * safeR, 0, math.sin(a) * safeR)
+                    else
+                        local sv = -S.orbitAngle * 1.2 + t
+                        lo = Vector3.new(0, math.cos(sv) * safeR, math.sin(sv) * safeR)
+                    end
+                elseif f == 18 then
+                    local a = S.orbitAngle + t
+                    local lr = safeR * (0.35 + 0.65 * math.abs(math.cos(4 * a)))
+                    lo = Vector3.new(math.cos(a) * lr, -2.6, math.sin(a) * lr)
+                elseif f == 19 then
+                    local pr = (i / total)
+                    local py = -2.5 + (pr * safeR * 0.8)
+                    local prr = (1 - pr) * safeR * 0.8
+                    local a = S.orbitAngle + (math.floor(pr * 3) * (2 * math.pi / 3)) + (t * 0.2)
+                    lo = Vector3.new(math.cos(a) * prr, py, math.sin(a) * prr)
+                elseif f == 20 then
+                    local ei = (i % 8)
+                    local ch = safeR * 0.45
+                    local cx = ((ei % 2 == 0) and 1 or -1) * ch
+                    local cy = (((math.floor(ei / 2)) % 2 == 0) and 1 or -1) * ch
+                    local cz = (((math.floor(ei / 4)) % 2 == 0) and 1 or -1) * ch
+                    local sc = CFrame.Angles(S.orbitAngle * 0.8, S.orbitAngle * 0.5, 0)
+                    lo = (sc * Vector3.new(cx, cy, cz))
+                elseif f == 21 then
+                    local pr = (i - 1) / total
+                    local br = math.sin(tick() * 2.2) * 0.28
+                    if pr < 0.50 then
+                        local ly = math.min(math.floor(pr / 0.10), 4)
+                        local wi = (pr % 0.10) / 0.10
+                        local ra = wi * math.pi
+                        local rr = safeR * (0.85 - ly * 0.09)
+                        local ry = -2.5 + ly * 1.35 + br
+                        lo = Vector3.new(math.cos(ra) * rr, ry, -0.34 * rr - math.sin(ra) * rr * 0.55)
+                    elseif pr < 0.72 then
+                        local ap = (pr - 0.50) / 0.22
+                        lo = Vector3.new(-(2.8 + ap * safeR * 0.48), 1.6 + ap * safeR * 0.42 - ap * ap * safeR * 0.10, -1.0 + ap * 1.4)
+                    elseif pr < 0.94 then
+                        local ap = (pr - 0.72) / 0.22
+                        lo = Vector3.new(2.8 + ap * safeR * 0.48, 1.6 + ap * safeR * 0.42 - ap * ap * safeR * 0.10, -1.0 + ap * 1.4)
+                    else
+                        local ap = (pr - 0.94) / 0.06
+                        local a = S.orbitAngle * 3 + ap * math.pi * 2
+                        lo = Vector3.new(math.cos(a) * 2.2, 6.5 + math.sin(tick() * 3) * 0.3, math.sin(a) * 2.2 - 1.0)
+                    end
+                elseif f == 22 then
+                    local pr = (i - 1) / total
+                    local er = safeR * 0.6
+                    local eh = 10 + safeR * 0.25
+                    local ez = -safeR * 1.6
+                    if pr < 0.55 then
+                        local k = pr / 0.55
+                        local a = S.orbitAngle + k * math.pi * 2
+                        lo = Vector3.new(math.cos(a) * er, eh + math.sin(a) * er, ez)
+                    elseif pr < 0.75 then
+                        local k = (pr - 0.55) / 0.20
+                        local a = -S.orbitAngle * 2 + k * math.pi * 2
+                        lo = Vector3.new(math.cos(a) * er * 0.35, eh + math.sin(a) * er * 0.35, ez)
+                    elseif pr < 0.90 then
+                        local dtn = math.max(math.floor(total * 0.15), 3)
+                        local dti = math.min(math.floor((pr - 0.75) / 0.15 * dtn + 1e-4), dtn - 1)
+                        local pdd = math.max(math.ceil(dtn / 3), 1)
+                        local grp = dti % 3
+                        local sub = math.floor(dti / 3)
+                        local a = S.orbitAngle * 2 + grp * (math.pi * 2 / 3)
+                        local sa = (sub / pdd) * math.pi * 2
+                        lo = Vector3.new(math.cos(a) * er * 0.6 + math.cos(sa) * 1.1, eh + math.sin(a) * er * 0.6 + math.sin(sa) * 1.1, ez)
+                    else
+                        local k = (pr - 0.90) / 0.10
+                        lo = Vector3.new(-er * 1.05 + k * er * 2.1, eh + er * 0.62 + math.sin(k * math.pi) * 0.8, ez)
+                    end
+                elseif f == 23 then
+                    local pr = (i - 1) / total
+                    local hy = 5.5 + safeR * 0.45
+                    local hz = -safeR * 0.15
+                    local orr = safeR * 0.42
+                    if pr < 0.70 then
+                        local k = pr / 0.70
+                        local phi = math.acos(1 - 2 * k)
+                        local th = math.sqrt(math.max(total, 1) * math.pi) * phi + S.orbitAngle * 3
+                        lo = Vector3.new(orr * math.cos(th) * math.sin(phi), hy + orr * math.cos(phi), hz + orr * math.sin(th) * math.sin(phi))
+                    else
+                        local k = (pr - 0.70) / 0.30
+                        local a = -S.orbitAngle * 4 + k * math.pi * 2
+                        lo = Vector3.new(math.cos(a) * safeR * 0.62, hy, hz + math.sin(a) * safeR * 0.62)
+                    end
+                elseif f == 24 then
+                    local rc = 9
+                    local ri = (i - 1) % rc
+                    local wi = math.floor((i - 1) / rc)
+                    local prr = math.max(math.ceil(total / rc), 1)
+                    local a = S.orbitAngle + (wi / prr) * math.pi * 2
+                    local col = ri % 3
+                    local row = math.floor(ri / 3)
+                    local rr = 1.7
+                    lo = Vector3.new((col - 1) * (safeR * 0.5) + math.cos(a) * rr, 2.5 + (row - 1) * (safeR * 0.5) + math.sin(a) * rr, -safeR * 0.5)
+                elseif f == 25 then
+                    local pr = (i - 1) / total
+                    local sw = safeR * 0.9
+                    local sh = safeR * 1.1 + 5
+                    local sz = 0
+                    local by = -3
+                    if pr < 0.28 then
+                        local k = pr / 0.28
+                        lo = Vector3.new(-sw, by + k * sh, sz)
+                    elseif pr < 0.56 then
+                        local k = (pr - 0.28) / 0.28
+                        lo = Vector3.new(sw, by + k * sh, sz)
+                    elseif pr < 0.72 then
+                        local k = (pr - 0.56) / 0.16
+                        lo = Vector3.new(-sw * 1.25 + k * sw * 2.5, by + sh, sz)
+                    elseif pr < 0.88 then
+                        local k = (pr - 0.72) / 0.16
+                        lo = Vector3.new(-sw * 1.05 + k * sw * 2.1, by + sh - safeR * 0.22, sz)
+                    else
+                        local k = (pr - 0.88) / 0.12
+                        local a = S.orbitAngle * 2 + k * math.pi * 2
+                        lo = Vector3.new(math.cos(a) * sw * 1.3, by + sh - safeR * 0.55, sz + math.sin(a) * sw * 0.25)
+                    end
+                elseif f == 26 then
+                    local pr = (i - 1) / total
+                    local a = S.orbitAngle * 3 + pr * math.pi * 8
+                    local sr = safeR * (0.25 + 0.75 * pr)
+                    lo = Vector3.new(math.cos(a) * sr, -3 + pr * safeR * 1.2, math.sin(a) * sr)
+                elseif f == 27 then
+                    local a = S.orbitAngle * 2.5 + (i / total) * math.pi * 2
+                    local sp = (i % 2 == 0) and 1.0 or 0.45
+                    local jg = 0.9 + 0.25 * math.sin(tick() * 25 + i)
+                    local sr = safeR * sp * jg
+                    lo = Vector3.new(math.cos(a) * sr, ((i % 3) - 1) * 1.2, math.sin(a) * sr)
+                elseif f == 28 then
+                    local pr = (i - 1) / total
+                    local sz = -safeR * 0.85
+                    local zh = sz + 2.2
+                    local za = sz - 1.4
+                    local zl = sz + 1.0
+                    if pr < 0.34 then
+                        local k = pr / 0.34
+                        local a = k * math.pi * 2
+                        lo = Vector3.new(math.cos(a) * safeR * 0.34, 5.2 + math.sin(a) * safeR * 0.30, sz)
+                    elseif pr < 0.50 then
+                        local k = (pr - 0.34) / 0.16
+                        local a = k * math.pi * 2
+                        lo = Vector3.new(math.cos(a) * safeR * 0.17, 11.4 + math.sin(a) * safeR * 0.19, zh)
+                    elseif pr < 0.68 then
+                        local k = (pr - 0.50) / 0.18
+                        lo = Vector3.new(-(safeR * 0.44 + k * safeR * 0.50), 6.2 - k * 6.0, za)
+                    elseif pr < 0.86 then
+                        local k = (pr - 0.68) / 0.18
+                        lo = Vector3.new(safeR * 0.44 + k * safeR * 0.50, 6.2 - k * 6.0, za)
+                    else
+                        local k = (pr - 0.86) / 0.14
+                        local side = (i % 2 == 0) and -1 or 1
+                        lo = Vector3.new(side * safeR * 0.20, -2.4 - k * 4.0, zl)
+                    end
+                end
+
+                local ro = rot3D * lo
+                local tPos = (baseC * CFrame.new(ro)).Position
+                local cp = part.Position
+                local ds = (tPos - cp).Magnitude
+                if ds < 0.02 and S.OrbitSpeed <= 0 and not S.NativeFlyActive and charSpeed < 1.5 then
+                    if S.sensorState[part] == true then S.disablePartSensors(part) end
+                    goto continue
+                end
+                if ds < safeR * 0.35 and S.lodSkipOrbit(i) then goto continue end
+                if S.FarGrabEnabled and ds > (S.FarGrabTetherDist or 110) then
+                    S.farDrag(part, cp, tPos, ds)
+                    S.farGrabbedParts[part] = true
+                else
+                    S.farGrabbedParts[part] = nil
+                    local pa = eff
+                    local vc = S.MaxPartSpeed
+                    if ds > safeR * 2 then
+                        local ov = math.clamp((ds - safeR * 2) / math.max(safeR, 1), 0, 6)
+                        pa = eff * (2 + ov)
+                        vc = S.MaxPartSpeed * (1 + ov * 0.5)
+                    end
+                    local la = math.clamp(pa * dt, 0.05, 1)
+                    local np = cp:Lerp(tPos, la)
+                    part.CFrame = CFrame.new(np) * part.CFrame.Rotation
+                    local vv = (np - cp) / math.max(dt, 0.016)
+                    if vv.Magnitude > vc then vv = vv.Unit * vc end
+                    part.AssemblyLinearVelocity = vv
+                end
+                if S.LethalTorque and S.OrbitSpeed > 0 then
+                    part.AssemblyAngularVelocity = Vector3.new(200,200,200)
+                else
+                    part.AssemblyAngularVelocity = Vector3.zero
+                end
+            end
+
+            if S.CenterOrbitCollide and S.CenterMode == 2 and pivotRoot ~= root then
+                if not part.CanCollide then S.setPartCollide(part, true, true) end
+            end
+            if part.CanCollide then S.enforceFastPartNoClip(part, root) end
+
+            local ws = part.CanCollide or S.activeHomingParts[part] ~= nil or S.strikeSensors
+            if ws then
+                if S.sensorState[part] ~= true then S.enablePartSensors(part) end
+                if part.CanCollide and not S.activeConstraints[part]
+                    and S.immunityUsedThisFrame < S.SelfImmunityPerFrame then
+                    S.immunityUsedThisFrame = S.immunityUsedThisFrame + 1
+                    S.applySelfImmunity(part)
+                end
+            elseif S.sensorState[part] == true then
+                S.disablePartSensors(part)
+                if S.activeConstraints[part] then S.clearSelfImmunity(part) end
+            end
+
+            ::continue::
+        end
+    end
+end))
+
+-- ============================================================
+-- 21. PERIODIC CENTER DROPDOWN REFRESH + INIT
+-- ============================================================
+task.spawn(function()
+    while task.wait(2) do
+        if not S.ScreenGui or not S.ScreenGui.Parent then break end
+        refreshCenterDropdown()
+        if centerDropdown and centerDropdown.Refresh then
+            pcall(function() centerDropdown:Refresh(centerValues) end)
+        end
+    end
+end)
+
+Library:Notify("W7s Blackhole V40 loaded — press RightShift to open menu", 5)
