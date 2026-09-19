@@ -1,0 +1,1338 @@
+if not game:IsLoaded() then
+	game.Loaded:Wait()
+end
+local t1 = {}
+local u2 = cloneref or function(p1)
+	return p1
+end
+function t1.__index(p2, p3)
+	local _pcall = pcall
+	local u176 = p3
+	local v177, v178 = pcall(function()
+		return u2(game:GetService(u176))
+	end)
+	if not v177 then
+		warn("Invalid Service: " .. tostring(p3))
+		return nil
+	end
+	rawset(p2, p3, v178)
+	return v178
+end
+local self = setmetatable({}, t1)
+local Workspace = self.Workspace
+local Players = self.Players
+local ReplicatedStorage = self.ReplicatedStorage
+local RunService = self.RunService
+local VirtualUser = self.VirtualUser
+local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
+	Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+	LocalPlayer = Players.LocalPlayer
+end
+local v10 = RunService.PreSimulation or RunService.Stepped
+local v11 = RunService.PostSimulation or RunService.Heartbeat
+local u12 = false
+local t2 = {}
+local u14 = false
+local timestamp = os.time()
+local n1 = 0
+local timestamp2 = os.time()
+local timestamp3 = os.time()
+local n2 = 0
+local u20 = false
+local u21 = false
+local t3 = {
+	EnableAutoFarm = false,
+	AutoFarmSpeed = 22,
+	AutoFarmOffset = -3.5,
+	AutoFarmDelay = 0.05,
+	AutoResetOnFull = false,
+	AutoEndRound = false,
+	AntiAfk = true,
+	AntiFling = false,
+	AutoFarmMode = "Nearest",
+	EnableWebhook = false,
+	WebhookUrl = "",
+	DiscordUserId = "",
+	WebhookInterval = 5,
+	StallThreshold = 3,
+}
+local t4 = {
+	RoundStart = false,
+	VictoryScreen = false,
+}
+local t5 = {
+	Lobby = true,
+	RegularLobby = true,
+	ServerStatus = true,
+	EffectLoader = true,
+	RoundTimerPart = true,
+	WeaponDisplays = true,
+	Camera = true,
+	Terrain = true,
+	PetContainer = true,
+	GameSettings = true,
+	LoadLobby = true,
+	ServerVersion = true,
+}
+local v25 = ReplicatedStorage:WaitForChild("Remotes", 5) and ReplicatedStorage.Remotes:WaitForChild("Gameplay", 5)
+local v26 = v25 and v25:WaitForChild("CoinsStarted", 5) or nil
+local v27 = v25 and v25:WaitForChild("CoinCollected", 5) or nil
+local v28 = v25 and v25:WaitForChild("RoleSelect", 5) or nil
+local v29 = v25 and v25:WaitForChild("RoundStart", 5) or nil
+local v30 = v25 and v25:WaitForChild("VictoryScreen", 5) or nil
+local v31 = v25 and v25:WaitForChild("GameOver", 5) or nil
+local v32 = v25 and v25:WaitForChild("GetCoin", 5) or nil
+local v33 = v25 and v25:WaitForChild("PlayerDataChanged", 5) or nil
+local v34 = ReplicatedStorage:WaitForChild("Modules", 5) and ReplicatedStorage.Modules:WaitForChild("CurrentRoundClient", 5)
+local lib = nil
+if v34 then
+	local _pcall = pcall
+	local u37 = v34
+	pcall(function()
+		lib = require(u37)
+	end)
+end
+local u38 = nil
+local t6 = {}
+local Attachment = nil
+local AlignPosition = nil
+local AlignOrientation = nil
+local u43 = request or (http_request or (syn and syn.request or http and http.request))
+local u44 = self
+local function v45(p4, p5)
+	if p4 and p4 ~= "" then
+		if type(u43) == "function" then
+			local elapsed = os.clock()
+			if not (elapsed - n2 < 5) then
+				n2 = elapsed
+				local _pcall = pcall
+				local u185 = p4
+				local v186, _ = pcall(function()
+					return u43({
+						Url = u185,
+						Method = "POST",
+						Headers = {
+							["Content-Type"] = "application/json",
+						},
+						Body = u44.HttpService:JSONEncode(p5),
+					})
+				end)
+				return v186
+			end
+			return false
+		end
+	end
+	return false
+end
+local u46 = Workspace
+local u47 = t5
+local u48 = Players
+local function v49()
+	if not u38 or (u38.Parent ~= u46 or not u38:FindFirstChild("CoinContainer")) then
+		u38 = nil
+		for _, child in ipairs(u46:GetChildren()) do
+			if
+				child:IsA("Model")
+				and not u47[child.Name]
+				and not u48:GetPlayerFromCharacter(child)
+				and (child:FindFirstChild("CoinContainer") or child:FindFirstChild("Spawns"))
+			then
+				u38 = child
+				return child
+			end
+		end
+		return nil
+	end
+	return u38
+end
+local u50 = v49
+local u51 = Workspace
+local function v52()
+	local Character = LocalPlayer.Character
+	local v198 = Character and Character:FindFirstChildOfClass("Humanoid")
+	if Character and v198 and not (v198.Health <= 0) then
+		if LocalPlayer:GetAttribute("Alive") ~= false then
+			if not lib or not lib.PlayerData then
+				if u50() then
+					local HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
+					if HumanoidRootPart and u51:FindFirstChild("Lobby") then
+						local Lobby = u51.Lobby
+						local v201 = Lobby:FindFirstChild("Spawns") or Lobby:FindFirstChildOfClass("SpawnLocation")
+						if v201 then
+							local v202 = v201:IsA("Model") and v201:GetModelCFrame().Position or v201.Position
+							if (HumanoidRootPart.Position - v202).Magnitude < 150 then
+								return false
+							end
+						end
+					end
+					return true
+				end
+				return false
+			end
+			local v203 = lib.PlayerData[LocalPlayer.Name]
+			if v203 then
+				if type(v203) ~= "table" or v203.Dead ~= true then
+					return true
+				end
+				return false
+			end
+			return false
+		end
+		return false
+	end
+	return false
+end
+local u53 = v49
+local u54 = Workspace
+local u55 = t4
+local function v56()
+	if u53() then
+		local RoundTimerPart = u54:FindFirstChild("RoundTimerPart")
+		if RoundTimerPart then
+			local SurfaceGui = RoundTimerPart:FindFirstChildOfClass("SurfaceGui")
+			local v206 = SurfaceGui and SurfaceGui:FindFirstChildOfClass("Frame")
+			local v207 = v206 and v206:FindFirstChild("Timer")
+			if v207 and v207.Text ~= "" and v207.Text ~= "0s" then
+				return true
+			end
+		end
+		return u55.RoundStart and not u55.VictoryScreen
+	end
+	return false
+end
+local u57 = t3
+local u58 = timestamp
+local u59 = v52
+local u60 = v45
+local function v61(p6)
+	if u57.EnableWebhook and u57.WebhookUrl ~= "" then
+		local v209 = os.time() - u58
+		local v210 = os.time() - timestamp2
+		local v212 = identifyexecutor and identifyexecutor() or "Unknown Executor"
+		local t7 = {
+			title = "Farm Report",
+			color = 2977535,
+			description = "**" .. (p6 or "Status Update") .. "**",
+		}
+		local t8 = {}
+		local t9 = {
+			name = "Player",
+		}
+		local Name = LocalPlayer.Name
+		local UserId = LocalPlayer.UserId
+		t9.value = "`" .. Name .. "` (`" .. tostring(UserId) .. "`)"
+		t9.inline = true
+		local t10 = {
+			name = "Executor",
+			value = "`" .. v212 .. "`",
+			inline = true,
+		}
+		local t11 = {
+			name = "Runtime",
+		}
+		local v220 = v209 / 3600
+		local v221 = math.floor(v220)
+		local v222 = v209 % 3600 / 60
+		local v223 = math.floor(v222)
+		local v224 = v209 % 60
+		local v225 = math.floor(v224)
+		t11.value = "`" .. string.format("%02dh %02dm %02ds", v221, v223, v225) .. "`"
+		t11.inline = true
+		local t12 = {
+			name = "Coins",
+		}
+		t12.value = tostring(n1)
+		t12.inline = true
+		local t13 = {
+			name = "Idle",
+			value = "`" .. tostring(v210) .. "s`",
+			inline = true,
+		}
+		local t14 = {
+			name = "Status",
+			value = u59() and "Farming" or "Lobby",
+			inline = true,
+		}
+		t8[1] = t9
+		t8[2] = t10
+		t8[3] = t11
+		t8[4] = t12
+		t8[5] = t13
+		t8[6] = t14
+		t7.fields = t8
+		t7.footer = {
+			text = "VISION HUB",
+		}
+		t7.timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+		u60(u57.WebhookUrl, {
+			embeds = {
+				t7,
+			},
+		})
+		return
+	end
+end
+local u62 = t3
+local u63 = timestamp
+local u64 = v45
+local u68 = Players
+local function v69()
+	if lib and lib.PlayerData then
+		for k, v in pairs(lib.PlayerData) do
+			local k2 = u68:FindFirstChild(k)
+			if k2 and k2 ~= LocalPlayer and type(v) == "table" and (v.Role == "Murderer" or v.role == "Murderer") then
+				return k2
+			end
+		end
+	end
+	for k, v in pairs(t6) do
+		local v257 = typeof(k) == "Instance" and k or u68:FindFirstChild((tostring(k)))
+		if v257 and v257 ~= LocalPlayer and type(v) == "table" and (v.Role == "Murderer" or v.role == "Murderer") then
+			return v257
+		end
+	end
+	for _, player in ipairs(u68:GetPlayers()) do
+		if
+			player ~= LocalPlayer
+			and player.Character
+			and (player.Character:FindFirstChild("Knife") or player:FindFirstChild("Backpack") and player.Backpack:FindFirstChild("Knife"))
+		then
+			return player
+		end
+	end
+	return nil
+end
+local u70 = v11
+local function v71(p7)
+	local s1 = nil
+	local u262 = nil
+	local Attachment2 = nil
+	local LinearVelocity = nil
+	local Character = LocalPlayer.Character
+	local v266 = Character and Character:FindFirstChildOfClass("Humanoid")
+	local u267 = v266 and v266.RootPart
+	local v268 = p7 and p7.Character
+	if v268 then
+		s1 = "HumanoidRootPart"
+		u262 = v268
+		v268 = v268:FindFirstChild("HumanoidRootPart")
+	end
+	if Character and u267 and v268 and v266 then
+		u262 = v266.Health
+		s1 = 0
+		if 0 < u262 then
+			u262 = u267.AssemblyLinearVelocity
+			s1 = u267.AssemblyAngularVelocity
+			Attachment2 = Instance.new("Attachment")
+			Attachment2.Name = "FlingAttachment"
+			Attachment2.Parent = u267
+			local AngularVelocity = Instance.new("AngularVelocity")
+			AngularVelocity.Attachment0 = Attachment2
+			AngularVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+			AngularVelocity.MaxTorque = 1e999
+			AngularVelocity.AngularVelocity = Vector3.new(0, 999999, 0)
+			AngularVelocity.Parent = u267
+			LinearVelocity = Instance.new("LinearVelocity")
+			LinearVelocity.Attachment0 = Attachment2
+			LinearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+			LinearVelocity.MaxForce = 1e999
+			LinearVelocity.VectorVelocity = Vector3.zero
+			LinearVelocity.Parent = u267
+			local elapsed = os.clock()
+			while u267 and v268 and u267.Parent and v268.Parent and v266.Health > 0 and os.clock() - elapsed < 1.8 do
+				u70:Wait()
+				if u267 and v268 then
+					u267.CFrame = v268.CFrame * CFrame.new(0, 0, 0.3)
+					u267.AssemblyLinearVelocity = Vector3.new(99999, 99999, 99999)
+					u267.AssemblyAngularVelocity = Vector3.new(0, 999999, 0)
+				end
+			end
+			if AngularVelocity then
+				local _pcall = pcall
+				local u272 = AngularVelocity
+				pcall(function()
+					u272:Destroy()
+				end)
+			end
+			if LinearVelocity then
+				pcall(function()
+					LinearVelocity:Destroy()
+				end)
+			end
+			if Attachment2 then
+				pcall(function()
+					Attachment2:Destroy()
+				end)
+			end
+			if u267 then
+				pcall(function()
+					u267.AssemblyLinearVelocity = u262
+					u267.AssemblyAngularVelocity = s1
+				end)
+			end
+		end
+	end
+end
+local function u72(p8)
+	if p8 then
+		if
+			not Attachment
+			or p8 ~= Attachment.Parent
+			or not AlignPosition
+			or p8 ~= AlignPosition.Parent
+			or not AlignOrientation
+			or p8 ~= AlignOrientation.Parent
+		then
+			if Attachment then
+				pcall(function()
+					Attachment:Destroy()
+				end)
+			end
+			if AlignPosition then
+				pcall(function()
+					AlignPosition:Destroy()
+				end)
+			end
+			if AlignOrientation then
+				pcall(function()
+					AlignOrientation:Destroy()
+				end)
+			end
+			Attachment = Instance.new("Attachment")
+			Attachment.Name = "FarmAttachment"
+			Attachment.Parent = p8
+			AlignPosition = Instance.new("AlignPosition")
+			AlignPosition.Mode = Enum.PositionAlignmentMode.OneAttachment
+			AlignPosition.RigidityEnabled = true
+			AlignPosition.ApplyAtCenterOfMass = true
+			AlignPosition.Attachment0 = Attachment
+			AlignPosition.Position = p8.Position
+			AlignPosition.Parent = p8
+			AlignOrientation = Instance.new("AlignOrientation")
+			AlignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+			AlignOrientation.RigidityEnabled = true
+			AlignOrientation.Attachment0 = Attachment
+			AlignOrientation.CFrame = CFrame.Angles(1.5707963267948966, 0, 0)
+			AlignOrientation.Parent = p8
+			return Attachment, AlignPosition, AlignOrientation
+		end
+		return Attachment, AlignPosition, AlignOrientation
+	end
+	return nil, nil, nil
+end
+local function v73()
+	if Attachment then
+		pcall(function()
+			Attachment:Destroy()
+		end)
+		Attachment = nil
+	end
+	if AlignPosition then
+		pcall(function()
+			AlignPosition:Destroy()
+		end)
+		AlignPosition = nil
+	end
+	if AlignOrientation then
+		pcall(function()
+			AlignOrientation:Destroy()
+		end)
+		AlignOrientation = nil
+	end
+end
+if v33 then
+	v33.OnClientEvent:Connect(function(p9)
+		if type(p9) == "table" then
+			t6 = p9
+		end
+	end)
+end
+if v28 then
+	local OnClientEvent = v28.OnClientEvent
+	local u75 = t4
+	OnClientEvent:Connect(function()
+		u75.RoundStart = true
+		u75.VictoryScreen = false
+		u12 = false
+		t2 = {}
+		u14 = false
+	end)
+end
+if v29 then
+	local OnClientEvent = v29.OnClientEvent
+	local u77 = t4
+	OnClientEvent:Connect(function()
+		u77.RoundStart = true
+		u77.VictoryScreen = false
+		u12 = false
+		t2 = {}
+		u14 = false
+	end)
+end
+if v30 then
+	local OnClientEvent = v30.OnClientEvent
+	local u79 = t4
+	local u80 = v73
+	OnClientEvent:Connect(function()
+		u79.RoundStart = false
+		u79.VictoryScreen = true
+		u12 = false
+		t2 = {}
+		u14 = false
+		u80()
+	end)
+end
+if v31 then
+	local OnClientEvent = v31.OnClientEvent
+	local u82 = t4
+	local u83 = v73
+	OnClientEvent:Connect(function()
+		u82.RoundStart = false
+		u82.VictoryScreen = false
+		u12 = false
+		t2 = {}
+		u14 = false
+		u83()
+	end)
+end
+local CharacterAdded = LocalPlayer.CharacterAdded
+local u85 = v73
+local u86 = t3
+local u87 = v56
+local u88 = v69
+local u89 = v71
+CharacterAdded:Connect(function(p10)
+	u12 = false
+	t2 = {}
+	u14 = false
+	u85()
+	local Humanoid = p10:WaitForChild("Humanoid", 5)
+	if Humanoid then
+		Humanoid.Died:Connect(function()
+			if u86.AutoEndRound and u87() then
+				local v342 = u88()
+				if v342 then
+					local u344 = v342
+					pcall(function()
+						u89(u344)
+					end)
+				end
+			end
+		end)
+	end
+end)
+local u90 = t3
+local u91 = Players
+v10:Connect(function()
+	local Character = LocalPlayer.Character
+	if u90.EnableAutoFarm and Character then
+		for _, descendant in ipairs(Character:GetDescendants()) do
+			if descendant:IsA("BasePart") and descendant.CanCollide then
+				descendant.CanCollide = false
+			end
+		end
+	end
+	if u90.AntiFling then
+		for _, player in ipairs(u91:GetPlayers()) do
+			if player ~= LocalPlayer and player.Character then
+				for _, descendant in ipairs(player.Character:GetDescendants()) do
+					if descendant:IsA("BasePart") and descendant.CanCollide then
+						descendant.CanCollide = false
+					end
+				end
+			end
+		end
+	end
+end)
+local u92 = t3
+local u93 = v69
+local u94 = v71
+local function v95()
+	if u92.AutoEndRound then
+		local v284 = u93()
+		if v284 then
+			local _pcall = pcall
+			local u286 = v284
+			pcall(function()
+				u94(u286)
+			end)
+		end
+	end
+	local Character = LocalPlayer.Character
+	local v288 = Character and Character:FindFirstChildOfClass("Humanoid")
+	if u92.AutoResetOnFull and v288 and v288.Health > 0 then
+		v288.Health = 0
+	end
+end
+if v26 then
+	local OnClientEvent = v26.OnClientEvent
+	local u97 = v95
+	OnClientEvent:Connect(function(p11)
+		if type(p11) == "table" then
+			t2 = {}
+			local v290 = false
+			for k, v in pairs(p11) do
+				local v293 = (type(v) == "table" and v.CollectedAmount or 0) >= (type(v) == "table" and v.CollectionLimit or 1e999)
+				t2[k] = v293
+				if v293 then
+					v290 = true
+				end
+			end
+			local v294 = v290 and not u14
+			u12 = v290
+			u14 = v290
+			if v294 then
+				u97()
+			end
+			return
+		end
+	end)
+end
+if v27 then
+	local OnClientEvent = v27.OnClientEvent
+	local u99 = v95
+	OnClientEvent:Connect(function(p12, p13, p14, _)
+		if p12 then
+			n1 = n1 + 1
+			timestamp2 = os.time()
+			u20 = false
+			t2[p12] = type(p13) == "number" and (type(p14) == "number" and (p14 <= p13 or false))
+			local v299 = false
+			for _, v in pairs(t2) do
+				if v then
+					v299 = true
+					break
+				end
+			end
+			local v302 = v299 and not u14
+			u12 = v299
+			u14 = v299
+			if v302 then
+				u99()
+			end
+			return
+		end
+	end)
+end
+local spawn = task.spawn
+local u101 = t3
+local u102 = v11
+local u103 = v49
+local u104 = v56
+local u105 = v52
+local u106 = v73
+local u107 = Workspace
+local u108 = v32
+spawn(function()
+	while true do
+		if not u101.AutoFarmDelay or not (u101.AutoFarmDelay > 0) then
+			u102:Wait()
+		else
+			task.wait(u101.AutoFarmDelay)
+		end
+		local ok, _ = pcall(function()
+			local s2
+			local u346
+			local elapsed
+			local Character = LocalPlayer.Character
+			local v349 = Character and Character:FindFirstChildOfClass("Humanoid")
+			local v350 = Character and Character:FindFirstChild("HumanoidRootPart")
+			local v351 = u103()
+			local v352 = u104()
+			local v353 = u105()
+			if u101.EnableAutoFarm and (Character and v349 and not (v349.Health <= 0) and v350 and v352 and v353 and not u12) then
+				if v351 then
+					local CoinContainer = v351:FindFirstChild("CoinContainer")
+					local t15 = {}
+					if not CoinContainer then
+						local g358 = nil
+						local g359 = nil
+						for _, descendant in ipairs(v351:GetDescendants()) do
+							s2 = "BasePart"
+							if descendant:IsA("BasePart") then
+								repeat
+									if g358 or descendant.Name == "Coin_Server" then
+										g358 = false
+										repeat
+											if g359 or descendant:FindFirstChildOfClass("TouchTransmitter") then
+												g359 = false
+												s2 = descendant
+												table.insert(t15, descendant)
+											else
+												s2 = "TouchInterest"
+												if descendant:FindFirstChild("TouchInterest") then
+													g359 = true
+												end
+											end
+										until not g359
+									else
+										local v360 = descendant.Name:lower()
+										s2 = "coin"
+										if v360:find("coin") then
+											g358 = true
+										end
+									end
+								until not g358
+							end
+						end
+					else
+						local g364 = nil
+						for _, child in ipairs(CoinContainer:GetChildren()) do
+							s2 = "Coin_Server"
+							local v363 = child:FindFirstChild("Coin_Server") or child.Name == "Coin_Server" and child
+							if v363 then
+								repeat
+									if g364 or v363:FindFirstChildOfClass("TouchTransmitter") then
+										g364 = false
+										s2 = t15
+										u346 = v363
+										table.insert(t15, v363)
+									else
+										u346 = "TouchInterest"
+										s2 = v363
+										if v363:FindFirstChild("TouchInterest") then
+											g364 = true
+										end
+									end
+								until not g364
+							end
+						end
+					end
+					if #t15 > 0 then
+						local u367
+						if u101.AutoFarmMode ~= "Random" then
+							local sort = table.sort
+							local u366 = v350
+							sort(t15, function(p16, p17)
+								return (u366.Position - p16.Position).Magnitude < (u366.Position - p17.Position).Magnitude
+							end)
+							u367 = t15[1]
+						else
+							u367 = t15[math.random(1, #t15)]
+						end
+						if u367 and u367.Parent then
+							local v368, v369, v370 = u72(v350)
+							if v368 and v369 and v370 then
+								v350.AssemblyLinearVelocity = Vector3.zero
+								v350.AssemblyAngularVelocity = Vector3.zero
+								local v371 = u367.Position + Vector3.new(0, u101.AutoFarmOffset, 0)
+								local Magnitude = (v350.Position - v371).Magnitude
+								local AutoFarmSpeed = u101.AutoFarmSpeed
+								local v374 = Magnitude / math.max(AutoFarmSpeed, 1)
+								s2 = math.max(v374, 0.02)
+								u346 = v369.Position
+								elapsed = os.clock()
+								local u375 = nil
+								local u377 = v350
+								local u378 = v369
+								local u379 = v371
+								u375 = u102:Connect(function()
+									local v389 = (os.clock() - elapsed) / s2
+									local v390 = math.clamp(v389, 0, 1)
+									if u377 then
+										u377.AssemblyLinearVelocity = Vector3.zero
+										u377.AssemblyAngularVelocity = Vector3.zero
+									end
+									if u378 then
+										u378.Position = u346:Lerp(u379, v390)
+									end
+									if
+										(
+											v390 >= 1
+											or not u367
+											or not u367.Parent
+											or not u367:FindFirstChildOfClass("TouchTransmitter") and not u367:FindFirstChild("TouchInterest")
+										) and u375
+									then
+										u375:Disconnect()
+										u375 = nil
+									end
+								end)
+								while u375 do
+									u102:Wait()
+								end
+								if u367 and u367.Parent and v350 then
+									v350.AssemblyLinearVelocity = Vector3.zero
+									v350.AssemblyAngularVelocity = Vector3.zero
+									timestamp2 = os.time()
+									u20 = false
+									if typeof(firetouchinterest) == "function" then
+										local u382 = v350
+										pcall(function()
+											if u382:IsDescendantOf(u107) and u367:IsDescendantOf(u107) then
+												firetouchinterest(u382, u367, 0)
+												task.wait(0.02)
+												firetouchinterest(u382, u367, 1)
+											end
+										end)
+									end
+									if u108 then
+										pcall(function()
+											u108:FireServer(u367)
+										end)
+									end
+								end
+							end
+						end
+						return
+					end
+					u106()
+					if v349 then
+						v349.PlatformStand = false
+					end
+				end
+			else
+				u106()
+				if v349 then
+					v349.PlatformStand = false
+					return
+				end
+			end
+		end)
+		if not ok then
+			u106()
+		end
+	end
+end)
+local spawn2 = task.spawn
+local u110 = t3
+local u111 = v61
+local function u112(p18)
+	if not u62.EnableWebhook then
+		return
+	end
+	local WebhookUrl = u62.WebhookUrl
+	if WebhookUrl == "" then
+		return
+	end
+	local g232 = nil
+	repeat
+		if g232 or u62.DiscordUserId and u62.DiscordUserId ~= "" then
+			if not g232 then
+				local _ = "<@" .. u62.DiscordUserId .. ">"
+			end
+			if g232 or WebhookUrl then
+				g232 = false
+				local v234 = p18 / 60
+				local v235 = math.floor(v234)
+				local t16 = {
+					title = "Farm Stalled",
+					color = 16711731,
+					description = "**No coins have been collected recently.**",
+				}
+				local t17 = {}
+				local t18 = {
+					name = "Player",
+				}
+				local LocalPlayerName = LocalPlayer.Name
+				local UserId = LocalPlayer.UserId
+				t18.value = "`" .. LocalPlayerName .. "` (`" .. tostring(UserId) .. "`)"
+				t18.inline = true
+				local t19 = {
+					name = "Alert",
+					value = "No coins for **" .. v235 .. "m** (`" .. p18 .. "s`)",
+					inline = false,
+				}
+				local t20 = {
+					name = "Coins",
+				}
+				t20.value = tostring(n1)
+				t20.inline = true
+				local t21 = {
+					name = "Runtime",
+				}
+				local v245 = os.time() - u63
+				local v246 = v245 / 3600
+				local v247 = math.floor(v246)
+				local v248 = v245 % 3600 / 60
+				local v249 = math.floor(v248)
+				local v250 = v245 % 60
+				local v251 = math.floor(v250)
+				t21.value = "`" .. string.format("%02dh %02dm %02ds", v247, v249, v251) .. "`"
+				t21.inline = true
+				t17[1] = t18
+				t17[2] = t19
+				t17[3] = t20
+				t17[4] = t21
+				t16.fields = t17
+				t16.footer = {
+					text = "VISION HUB",
+				}
+				t16.timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+				u64(u62.WebhookUrl, {
+					content = WebhookUrl ~= "" and WebhookUrl or nil,
+					embeds = {
+						t16,
+					},
+				})
+				return
+			end
+		end
+		WebhookUrl = ""
+		g232 = true
+	until not g232
+end
+spawn2(function()
+	while true do
+		task.wait(10)
+		local timestamp4 = os.time()
+		if u110.EnableWebhook and u110.WebhookUrl ~= "" then
+			local v306 = u110.WebhookInterval * 60
+			if math.max(v306, 60) <= timestamp4 - timestamp3 then
+				timestamp3 = timestamp4
+				u111("Periodic Update")
+			end
+			if u110.EnableAutoFarm then
+				local v307 = u110.StallThreshold * 60
+				local v308 = math.max(v307, 30)
+				local v309 = timestamp4 - timestamp2
+				if v308 <= v309 and not u20 then
+					u20 = true
+					u112(v309)
+				end
+			end
+		end
+	end
+end)
+local _pcall = pcall
+local u114 = self
+local u115 = t3
+local u116 = v45
+local u117 = timestamp
+pcall(function()
+	local v310 = u114.GuiService or game:GetService("GuiService")
+	if v310 and v310.ErrorMessageChanged then
+		v310.ErrorMessageChanged:Connect(function(p19)
+			if p19 and type(p19) == "string" and #p19 > 0 and not u21 and u115.EnableWebhook then
+				if u115.WebhookUrl == "" then
+					return
+				end
+				task.spawn(function()
+					u21 = true
+					local v391 = u115.DiscordUserId and (u115.DiscordUserId ~= "" and "<@" .. u115.DiscordUserId .. ">") or ""
+					local WebhookUrl = u115.WebhookUrl
+					local t22 = {
+						content = v391 ~= "" and v391 or nil,
+					}
+					local t23 = {}
+					local t24 = {
+						title = "Client Disconnected",
+						color = 16711680,
+						description = "**Connection to Roblox was lost.**",
+					}
+					local t25 = {}
+					local t26 = {
+						name = "Player",
+						value = "`" .. LocalPlayer.Name .. "`",
+						inline = true,
+					}
+					local t27 = {
+						name = "Coins",
+					}
+					t27.value = tostring(n1)
+					t27.inline = true
+					local t28 = {
+						name = "Runtime",
+					}
+					local v402 = os.time() - u117
+					local v403 = v402 / 3600
+					local v404 = math.floor(v403)
+					local v405 = v402 % 3600 / 60
+					local v406 = math.floor(v405)
+					local v407 = v402 % 60
+					local v408 = math.floor(v407)
+					t28.value = "`" .. string.format("%02dh %02dm %02ds", v404, v406, v408) .. "`"
+					t28.inline = true
+					t25[1] = t26
+					t25[2] = t27
+					t25[3] = t28
+					t24.fields = t25
+					t24.footer = {
+						text = "VISION HUB",
+					}
+					t24.timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+					t23[1] = t24
+					t22.embeds = t23
+					u116(WebhookUrl, t22)
+				end)
+			end
+		end)
+	end
+end)
+local spawn3 = task.spawn
+local u119 = self
+local u120 = t3
+local u121 = v45
+local u122 = timestamp
+spawn3(function()
+	pcall(function()
+		local RobloxPromptGui = (u119.CoreGui or game:GetService("CoreGui")):WaitForChild("RobloxPromptGui", 10)
+		if RobloxPromptGui then
+			RobloxPromptGui.DescendantAdded:Connect(function(descendant)
+				if (descendant.Name == "ErrorTitle" or descendant.Name == "ErrorMessage") and (not u21 and u120.EnableWebhook) then
+					if u120.WebhookUrl == "" then
+						return
+					end
+					task.spawn(function()
+						u21 = true
+						local v410 = u120.DiscordUserId and (u120.DiscordUserId ~= "" and "<@" .. u120.DiscordUserId .. ">") or ""
+						local WebhookUrl = u120.WebhookUrl
+						local t29 = {
+							content = v410 ~= "" and v410 or nil,
+						}
+						local t30 = {}
+						local t31 = {
+							title = "Client Disconnected",
+							color = 16711680,
+							description = "**Connection to Roblox was lost.**",
+						}
+						local t32 = {}
+						local t33 = {
+							name = "Player",
+							value = "`" .. LocalPlayer.Name .. "`",
+							inline = true,
+						}
+						local t34 = {
+							name = "Coins",
+						}
+						t34.value = tostring(n1)
+						t34.inline = true
+						local t35 = {
+							name = "Runtime",
+						}
+						local v421 = os.time() - u122
+						local v422 = v421 / 3600
+						local v423 = math.floor(v422)
+						local v424 = v421 % 3600 / 60
+						local v425 = math.floor(v424)
+						local v426 = v421 % 60
+						local v427 = math.floor(v426)
+						t35.value = "`" .. string.format("%02dh %02dm %02ds", v423, v425, v427) .. "`"
+						t35.inline = true
+						t32[1] = t33
+						t32[2] = t34
+						t32[3] = t35
+						t31.fields = t32
+						t31.footer = {
+							text = "VISION HUB",
+						}
+						t31.timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+						t30[1] = t31
+						t29.embeds = t30
+						u121(WebhookUrl, t29)
+					end)
+				end
+			end)
+		end
+	end)
+end)
+local Idled = LocalPlayer.Idled
+local u124 = t3
+local u125 = VirtualUser
+local u126 = Workspace
+Idled:Connect(function()
+	if u124.AntiAfk then
+		pcall(function()
+			u125:Button2Down(Vector2.new(0, 0), u126.CurrentCamera.CFrame)
+			task.wait(0.5)
+			u125:Button2Up(Vector2.new(0, 0), u126.CurrentCamera.CFrame)
+		end)
+	end
+end)
+local v127 = loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/Library.lua"))()
+if v127 then
+	local v128 = loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/addons/SaveManager.lua"))()
+	local v129 = loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/addons/ThemeManager.lua"))()
+	local Options = v127.Options
+	local Toggles = v127.Toggles
+	local PlaceId = game.PlaceId
+	if ({
+		[142823291] = true,
+		[335132309] = true,
+		[636649648] = true,
+	})[PlaceId] then
+		local v133 = v127:CreateWindow({
+			Title = "VISION HUB",
+			Footer = "Created by: orialdev | " .. (identifyexecutor and identifyexecutor() or "Unknown Executor"),
+			Icon = "rbxassetid://125328263655945",
+			IconSize = UDim2.fromOffset(50, 50),
+			BackgroundImage = nil,
+			Font = Enum.Font.Gotham,
+			CornerRadius = 4,
+			Position = UDim2.fromOffset(100, 100),
+			Center = true,
+			AutoShow = true,
+			Resizable = true,
+			UnlockMouseWhileOpen = true,
+			ToggleKeybind = Enum.KeyCode.RightShift,
+			NotifySide = "Right",
+			ShowCustomCursor = false,
+			ShowMobileButtons = true,
+			MobileButtonsSide = "Left",
+			DisableSearch = false,
+			SearchbarSize = UDim2.fromScale(1, 1),
+			GlobalSearch = false,
+			EnableSidebarResize = true,
+			EnableCompacting = true,
+			DisableCompactingSnap = false,
+			SidebarCompacted = false,
+			MinContainerWidth = 256,
+			MinSidebarWidth = 128,
+			SidebarCompactWidth = 48,
+			SidebarCollapseThreshold = 0.5,
+			CompactWidthActivation = 128,
+			Animations = {
+				ToggleWindow = true,
+				TabSwitch = true,
+				Groupbox = true,
+				Dropdown = true,
+				KeyPicker = true,
+			},
+			TabTransitionTime = 0.22,
+			TabSwipeOffset = 26,
+			TabSwipeFrom = "bottom",
+		})
+		local t36 = {
+			AutoFarm = v133:AddTab({
+				Name = "Auto Farm",
+				Icon = "coins",
+			}),
+			Webhook = v133:AddTab({
+				Name = "Webhook",
+				Icon = "bell",
+			}),
+			Settings = v133:AddTab({
+				Name = "Settings",
+				Icon = "settings",
+			}),
+		}
+		local v135 = t36.AutoFarm:AddLeftGroupbox("Farm", "coins")
+		local v136 = t36.AutoFarm:AddRightGroupbox("Extras", "shield")
+		v135:AddToggle("EnableAutoFarm", {
+			Text = "Enable Auto Farm",
+			Default = t3.EnableAutoFarm,
+		})
+		local EnableAutoFarm = Toggles.EnableAutoFarm
+		local u138 = t3
+		EnableAutoFarm:OnChanged(function(p20)
+			u138.EnableAutoFarm = p20
+			if p20 then
+				u12 = false
+				t2 = {}
+				u14 = false
+			end
+		end)
+		v135:AddDivider()
+		v135:AddDropdown("AutoFarmMode", {
+			Text = "Target",
+			Values = {
+				"Nearest",
+				"Random",
+			},
+			Default = 1,
+			Multi = false,
+		})
+		local AutoFarmMode = Options.AutoFarmMode
+		local u140 = t3
+		local u141 = Options
+		AutoFarmMode:OnChanged(function()
+			u140.AutoFarmMode = u141.AutoFarmMode.Value
+		end)
+		v135:AddDivider()
+		v135:AddSlider("AutoFarmSpeed", {
+			Text = "Speed",
+			Min = 1,
+			Max = 100,
+			Default = t3.AutoFarmSpeed,
+			Rounding = 0,
+		})
+		local AutoFarmSpeed = Options.AutoFarmSpeed
+		local u143 = t3
+		AutoFarmSpeed:OnChanged(function(p21)
+			u143.AutoFarmSpeed = p21
+		end)
+		v135:AddSlider("AutoFarmOffset", {
+			Text = "Height",
+			Min = -6,
+			Max = 6,
+			Default = t3.AutoFarmOffset,
+			Rounding = 1,
+		})
+		local AutoFarmOffset = Options.AutoFarmOffset
+		local u145 = t3
+		AutoFarmOffset:OnChanged(function(p22)
+			u145.AutoFarmOffset = p22
+		end)
+		v135:AddSlider("AutoFarmDelay", {
+			Text = "Delay",
+			Min = 0,
+			Max = 2,
+			Default = t3.AutoFarmDelay,
+			Rounding = 2,
+		})
+		local AutoFarmDelay = Options.AutoFarmDelay
+		local u147 = t3
+		AutoFarmDelay:OnChanged(function(p23)
+			u147.AutoFarmDelay = p23
+		end)
+		v136:AddToggle("AutoResetOnFull", {
+			Text = "Auto Reset Full Bag",
+			Default = t3.AutoResetOnFull,
+		})
+		local AutoResetOnFull = Toggles.AutoResetOnFull
+		local u149 = t3
+		AutoResetOnFull:OnChanged(function(p24)
+			u149.AutoResetOnFull = p24
+		end)
+		v136:AddToggle("AutoEndRound", {
+			Text = "Auto End Round",
+			Default = t3.AutoEndRound,
+		})
+		local AutoEndRound = Toggles.AutoEndRound
+		local u151 = t3
+		AutoEndRound:OnChanged(function(p25)
+			u151.AutoEndRound = p25
+		end)
+		v136:AddDivider()
+		v136:AddToggle("AntiAfk", {
+			Text = "Anti AFK",
+			Default = t3.AntiAfk,
+		})
+		local AntiAfk = Toggles.AntiAfk
+		local u153 = t3
+		AntiAfk:OnChanged(function(p26)
+			u153.AntiAfk = p26
+		end)
+		v136:AddToggle("AntiFling", {
+			Text = "Anti Fling",
+			Default = t3.AntiFling,
+		})
+		local AntiFling = Toggles.AntiFling
+		local u155 = t3
+		AntiFling:OnChanged(function(p27)
+			u155.AntiFling = p27
+		end)
+		local v156 = t36.Webhook:AddLeftGroupbox("Webhook", "bell")
+		v156:AddToggle("EnableWebhook", {
+			Text = "Enable Webhook",
+			Default = t3.EnableWebhook,
+		})
+		local EnableWebhook = Toggles.EnableWebhook
+		local u158 = t3
+		EnableWebhook:OnChanged(function(p28)
+			u158.EnableWebhook = p28
+		end)
+		v156:AddDivider()
+		v156:AddInput("WebhookUrl", {
+			Default = t3.WebhookUrl,
+			Numeric = false,
+			Finished = true,
+			Text = "Webhook URL",
+			Placeholder = "https://discord.com/api/webhooks/...",
+		})
+		local WebhookUrl = Options.WebhookUrl
+		local u160 = t3
+		WebhookUrl:OnChanged(function(p29)
+			u160.WebhookUrl = p29
+		end)
+		v156:AddInput("DiscordUserId", {
+			Default = t3.DiscordUserId,
+			Numeric = false,
+			Finished = true,
+			Text = "Ping User ID",
+			Placeholder = "123456789012345678",
+		})
+		local DiscordUserId = Options.DiscordUserId
+		local u162 = t3
+		DiscordUserId:OnChanged(function(p30)
+			u162.DiscordUserId = p30
+		end)
+		v156:AddDivider()
+		v156:AddSlider("WebhookInterval", {
+			Text = "Report (Min)",
+			Min = 1,
+			Max = 60,
+			Default = t3.WebhookInterval,
+			Rounding = 0,
+		})
+		local WebhookInterval = Options.WebhookInterval
+		local u164 = t3
+		WebhookInterval:OnChanged(function(p31)
+			u164.WebhookInterval = p31
+		end)
+		v156:AddSlider("StallThreshold", {
+			Text = "Stall Alert",
+			Min = 1,
+			Max = 15,
+			Default = t3.StallThreshold,
+			Rounding = 0,
+		})
+		local StallThreshold = Options.StallThreshold
+		local u166 = t3
+		StallThreshold:OnChanged(function(p32)
+			u166.StallThreshold = p32
+		end)
+		local u167 = v156:AddLabel("Coins: 0")
+		task.spawn(function()
+			while true do
+				task.wait(1)
+				pcall(function()
+					if u167 then
+						u167:SetText("Coins: " .. tostring(n1))
+					end
+				end)
+			end
+		end)
+		v156:AddDivider()
+		local t37 = {
+			Text = "Send Report",
+		}
+		local u169 = t3
+		local u170 = v61
+		local u171 = v127
+		function t37.Func()
+			if u169.WebhookUrl == "" then
+				u171:Notify({
+					Title = "VISION HUB",
+					Description = "Enter a valid Webhook URL.",
+					Time = 3,
+				})
+				return
+			end
+			u170("Manual Test")
+			u171:Notify({
+				Title = "VISION HUB",
+				Description = "Report sent!",
+				Time = 3,
+			})
+		end
+		v156:AddButton(t37)
+		v129:SetLibrary(v127)
+		v128:SetLibrary(v127)
+		v129:SetDefaultTheme({
+			FontColor = Color3.fromRGB(255, 255, 255),
+			MainColor = Color3.fromRGB(15, 15, 25),
+			AccentColor = Color3.fromRGB(45, 110, 255),
+			BackgroundColor = Color3.fromRGB(10, 10, 15),
+			OutlineColor = Color3.fromRGB(35, 35, 45),
+			FontFace = Enum.Font.Gotham,
+		})
+		v128:IgnoreThemeSettings()
+		v128:SetIgnoreIndexes({
+			"MenuKeybind",
+		})
+		v129:SetFolder("Autofarm")
+		v128:SetFolder("Autofarm/MM2")
+		v128:BuildConfigSection(t36.Settings)
+		v129:ApplyToTab(t36.Settings)
+		v128:LoadAutoloadConfig()
+		return
+	end
+	v127:Notify({
+		Title = "VISION HUB",
+		Description = "Unsupported Game",
+		Time = 5,
+	})
+	return
+end
