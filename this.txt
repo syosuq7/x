@@ -1,0 +1,935 @@
+--[[
+    [FPS] One Tap  |  WindUI Edition
+    Author: MoonScript
+--]]
+
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local players          = game:GetService("Players")
+local userInputService = game:GetService("UserInputService")
+local runService       = game:GetService("RunService")
+local workspaceService = game:GetService("Workspace")
+local httpService      = game:GetService("HttpService")
+local localPlayer      = players.LocalPlayer
+local currentCamera    = workspaceService.CurrentCamera
+
+local CONFIG_FOLDER = "MoonScript_Library"
+local CONFIG_FILE   = CONFIG_FOLDER .. "/[FPS]_One_Tap.json"
+
+-- ============================================================
+-- Notify helper
+-- ============================================================
+local suppressNotify = false
+local function Notify(opts)
+    if suppressNotify then return end
+    opts = opts or {}
+    WindUI:Notify({
+        Title    = opts.Title   or "Notification",
+        Content  = opts.Content or "",
+        Duration = opts.Duration or 3,
+        Icon     = opts.Icon or "info",
+    })
+end
+
+-- ============================================================
+-- Aimbot state
+-- ============================================================
+local v145 = {
+    LockEnabled   = false,
+    FOVEnabled    = false,
+    VisibleCheck  = true,
+    SmoothLevel   = 1,
+    FOVRadius     = 60,
+    FOVColor      = Color3.fromRGB(255, 255, 255),
+    FOVActiveColor= Color3.fromRGB(255, 0, 0),
+    MaxDistance   = 500,
+    LockPart      = "Head",
+}
+local v146, v147 = false, 0
+
+local circle          = Drawing.new("Circle")
+circle.Visible        = false
+circle.Radius         = v145.FOVRadius
+circle.Thickness      = 2
+circle.Color          = v145.FOVColor
+circle.Filled         = false
+circle.Transparency   = 1
+
+local v148, v149 = {}, {}
+local f28
+
+local function f29(p)
+    local ch = f28(p)
+    if not ch then return nil end
+    return ch:FindFirstChild(v145.LockPart) or ch:FindFirstChild("HumanoidRootPart")
+end
+
+function f28(p)
+    if not p then return nil end
+    if typeof(p) == "Instance" and p:IsA("Player") then return p.Character end
+    if typeof(p) == "Instance" and p:IsA("Model")  then return p end
+    return nil
+end
+
+local function f30(p)
+    local ch = f28(p); if not ch then return nil end
+    return ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChild("Torso") or ch:FindFirstChild("UpperTorso")
+end
+
+local function f31(p)
+    local ch = f28(p)
+    local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health > 0
+end
+
+local function f32(p)
+    local rp = RaycastParams.new()
+    rp.FilterType = Enum.RaycastFilterType.Exclude
+    local list = {}
+    if localPlayer.Character then table.insert(list, localPlayer.Character) end
+    local ch = f28(p); if ch then table.insert(list, ch) end
+    rp.FilterDescendantsInstances = list
+    return rp
+end
+
+local function f33(p)
+    local lp, tp = f30(localPlayer), f30(p)
+    if not lp or not tp then return math.huge end
+    return (lp.Position - tp.Position).Magnitude
+end
+
+local function f34(part, params)
+    if not v145.VisibleCheck then return true end
+    local origin = currentCamera.CFrame.Position
+    local dir = part.Position - origin
+    if not params then
+        params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        local list = {}
+        if localPlayer.Character then table.insert(list, localPlayer.Character) end
+        for _, plr in ipairs(players:GetPlayers()) do
+            if plr.Character and plr.Character:IsAncestorOf(part) then
+                table.insert(list, plr.Character); break
+            end
+        end
+        local model = part:FindFirstAncestorOfClass("Model")
+        if model and model ~= localPlayer.Character then
+            local has = false
+            for _, v in ipairs(list) do
+                if v == model then has = true; break end
+            end
+            if not has then table.insert(list, model) end
+        end
+        params.FilterDescendantsInstances = list
+    end
+    return workspace:Raycast(origin, dir, params) == nil
+end
+
+local function f35(part)
+    local vp = currentCamera.ViewportSize
+    local cx, cy = vp.X / 2, vp.Y / 2
+    local sp, onScreen = currentCamera:WorldToViewportPoint(part.Position)
+    if not onScreen then return false, math.huge end
+    local d = math.sqrt((sp.X - cx) ^ 2 + (sp.Y - cy) ^ 2)
+    return d <= v145.FOVRadius, d
+end
+
+local function f36(p)
+    if not p or not f31(p) then return false end
+    local tgt = f29(p)
+    if not tgt then return false end
+    if f33(p) > v145.MaxDistance then return false end
+    local inFov = f35(tgt); if not inFov then return false end
+    if v145.VisibleCheck and not f34(tgt) then return false end
+    return true
+end
+
+local function f37()
+    local best, bestD = nil, math.huge
+    for _, plr in ipairs(players:GetPlayers()) do
+        if plr ~= localPlayer and f31(plr) then
+            local t = f29(plr)
+            if t and f33(plr) <= v145.MaxDistance then
+                local inFov, d = f35(t)
+                if inFov and f34(t) and d < bestD then
+                    best, bestD = plr, d
+                end
+            end
+        end
+    end
+    for model in pairs(v149) do
+        if model and model.Parent and f31(model) then
+            local t = f29(model)
+            if t and f33(model) <= v145.MaxDistance then
+                local inFov, d = f35(t)
+                if inFov and f34(t) and d < bestD then
+                    best, bestD = model, d
+                end
+            end
+        end
+    end
+    return best
+end
+
+local v174, v175, v176
+
+function Unlock()
+    v174, v146, v175, v176 = nil, false, nil, nil
+    circle.Color = v145.FOVColor
+end
+
+local function f38(p)
+    v174, v146, v176 = p, true, p
+    v175 = f32(p)
+    circle.Color = v145.FOVActiveColor
+end
+
+players.PlayerRemoving:Connect(function(plr) if plr == v174 then Unlock() end end)
+workspace.ChildRemoved:Connect(function(c)  if c  == v174 then Unlock() end end)
+
+-- ============================================================
+-- ESP state
+-- ============================================================
+local v181 = {
+    Enabled = false, Name = false, Box = false, Line = false,
+    HealthBar = false, Distance = false, LineMode = "Top",
+    BoxThickness = 1, LineThickness = 1, HealthBarWidth = 2, HealthBarPad = 4,
+    BoxScale = 1.15,
+    BoxColor = Color3.fromRGB(255,255,255),
+    LineColor = Color3.fromRGB(255,255,255),
+    NameColor = Color3.fromRGB(255,255,255),
+    DistColor = Color3.fromRGB(180,180,180),
+    HBGood = Color3.fromRGB(0,220,80),
+    HBMid  = Color3.fromRGB(255,200,0),
+    HBLow  = Color3.fromRGB(255,55,55),
+    MaxDistance = 300,
+}
+
+local color4 = Color3.fromRGB(255,200,0)
+local color5 = Color3.fromRGB(200,200,200)
+local color6 = Color3.fromRGB(0,0,0)
+local color7 = Color3.fromRGB(15,15,15)
+local abs, max3, floor, clamp = math.abs, math.max, math.floor, math.clamp
+local format = string.format
+
+local function f40(size, col)
+    local t = Drawing.new("Text")
+    t.Size = size or 13; t.Font = 2
+    t.Color = col or Color3.new(1,1,1)
+    t.Center = true; t.Outline = true; t.Visible = false
+    return t
+end
+
+local function f41(vp)
+    local m = string.lower(v181.LineMode)
+    if m == "top"    then return Vector2.new(vp.X * 0.5, 1) end
+    if m == "center" then return Vector2.new(vp.X * 0.5, vp.Y * 0.5) end
+    return Vector2.new(vp.X * 0.5, vp.Y - 1)
+end
+
+local function f42(hp)
+    if hp > 0.6 then return v181.HBGood end
+    if hp > 0.3 then return v181.HBMid end
+    return v181.HBLow
+end
+
+local function f43(col, filled, thick)
+    local s = Drawing.new("Square")
+    s.Color = col or Color3.new(1,1,1)
+    s.Filled = filled ~= nil and filled or false
+    s.Thickness = thick or 1
+    s.Visible = false
+    return s
+end
+
+local function f44(col, thick)
+    local l = Drawing.new("Line")
+    l.Color = col or Color3.new(1,1,1)
+    l.Thickness = thick or 1
+    l.Visible = false
+    return l
+end
+
+local f45
+function f45(col, radius)
+    local c = Drawing.new("Circle")
+    c.Color = col or Color3.new(1,1,1)
+    c.Radius = radius or 3
+    c.Filled = true; c.Thickness = 1; c.Visible = false
+    return c
+end
+
+local function f46(bc, lc, dc, hc)
+    return {
+        Box = f43(bc, false, 1), Line = f44(lc, 1), HeadDot = f45(lc, 2),
+        Label = f40(14, bc), Dist = f40(13, dc),
+        HBOut = f43(color6, false, 1), HBBg = f43(color7, true, 1), HBFill = f43(hc, true, 1),
+        _distM = -1, _distStr = "", _hpClr = nil, _vis = false,
+    }
+end
+
+local v183 = {}
+local function f47()
+    v183 = {}
+    for _, plr in ipairs(players:GetPlayers()) do v183[plr.Name] = true end
+end
+f47()
+
+players.PlayerAdded:Connect(function(plr) v183[plr.Name] = true end)
+players.PlayerRemoving:Connect(function(plr) v183[plr.Name] = nil end)
+
+local function hideData(d)
+    d.Box.Visible, d.Line.Visible, d.HeadDot.Visible = false, false, false
+    d.Label.Visible, d.Dist.Visible = false, false
+    d.HBOut.Visible, d.HBBg.Visible, d.HBFill.Visible = false, false, false
+    d._vis = false
+end
+
+local function removePlayer(plr)
+    local d = v148[plr]; if not d then return end
+    pcall(function()
+        d.Box:Remove(); d.Line:Remove(); d.HeadDot:Remove()
+        d.Label:Remove(); d.Dist:Remove()
+        d.HBOut:Remove(); d.HBBg:Remove(); d.HBFill:Remove()
+    end)
+    v148[plr] = nil
+end
+
+local function removeModel(model)
+    local d = v149[model]; if not d then return end
+    pcall(function()
+        d.Box:Remove(); d.Line:Remove(); d.HeadDot:Remove()
+        d.Label:Remove(); d.Dist:Remove()
+        d.HBOut:Remove(); d.HBBg:Remove(); d.HBFill:Remove()
+    end)
+    v149[model] = nil
+end
+
+local function f50()
+    for _, d in pairs(v148) do hideData(d); d._distM, d._hpClr = -1, nil end
+    for _, d in pairs(v149) do hideData(d); d._distM, d._hpClr = -1, nil end
+end
+
+local function isPlayerName(n) return v183[n] == true end
+
+local function addPlayer(plr)
+    if not plr or plr == localPlayer or v148[plr] then return end
+    local ok, d = pcall(f46, v181.BoxColor, v181.LineColor, v181.DistColor, v181.HBGood)
+    if ok then v148[plr] = d end
+end
+
+local function addModel(model)
+    if not model or v149[model] then return end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    local torso = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso")
+    if not hum or not torso then return end
+    if isPlayerName(model.Name) then return end
+    local ok, d = pcall(f46, color4, color4, color5, Color3.fromRGB(0,220,80))
+    if ok then v149[model] = d end
+end
+
+local function scanWorkspace()
+    for _, ch in ipairs(workspace:GetChildren()) do
+        if ch:IsA("Model") and ch ~= localPlayer.Character then
+            task.spawn(function()
+                task.wait(0.3)
+                if ch and ch.Parent then addModel(ch) end
+            end)
+        end
+    end
+end
+scanWorkspace()
+
+workspace.ChildAdded:Connect(function(ch)
+    if ch:IsA("Model") and ch ~= localPlayer.Character then
+        task.spawn(function()
+            task.wait(0.5)
+            if ch and ch.Parent and not isPlayerName(ch.Name) then addModel(ch) end
+        end)
+    end
+end)
+
+workspace.ChildRemoved:Connect(function(ch) if v149[ch] then removeModel(ch) end end)
+
+players.PlayerAdded:Connect(function(plr)
+    v183[plr.Name] = true
+    plr.CharacterAdded:Connect(function(ch) if v149[ch] then removeModel(ch) end end)
+    addPlayer(plr)
+end)
+
+players.PlayerRemoving:Connect(function(plr)
+    v183[plr.Name] = nil
+    removePlayer(plr)
+end)
+
+for _, plr in ipairs(players:GetPlayers()) do addPlayer(plr) end
+
+-- ESP render
+local function renderESP(data, target, hum, name, isNPC, cam, lpPos, maxDistSq, from)
+    local pos = target.Position
+    local distM = 0
+    if lpPos then
+        local diff = lpPos - pos
+        local magSq = diff.X^2 + diff.Y^2 + diff.Z^2
+        if magSq > maxDistSq then hideData(data) return end
+        distM = floor(magSq ^ 0.5)
+    end
+    local sp, onScreen = cam:WorldToViewportPoint(pos)
+    if not onScreen then hideData(data) return end
+    data._vis = true
+
+    local x = sp.X
+    local hpRatio = clamp(hum.Health / max3(hum.MaxHealth, 1), 0, 1)
+    local topY = cam:WorldToViewportPoint(pos + Vector3.new(0, 3.5, 0)).Y
+    local botY = cam:WorldToViewportPoint(pos - Vector3.new(0, 3.2, 0)).Y
+    local baseH = abs(botY - topY)
+    local boxH  = baseH * v181.BoxScale
+    local boxW  = boxH * 0.58
+    local boxX  = x - boxW * 0.5
+    local boxY  = topY - (boxH - baseH) * 0.5
+
+    if v181.Box then
+        data.Box.Position  = Vector2.new(boxX, boxY)
+        data.Box.Size      = Vector2.new(boxW, boxH)
+        data.Box.Color     = isNPC and color4 or v181.BoxColor
+        data.Box.Thickness = v181.BoxThickness
+        data.Box.Visible   = true
+    else data.Box.Visible = false end
+
+    if v181.HealthBar then
+        local w  = v181.HealthBarWidth
+        local hx = boxX - w - v181.HealthBarPad
+        local fh = max3(1, boxH * hpRatio)
+        local cl = f42(hpRatio)
+        data.HBOut.Position = Vector2.new(hx - 1, boxY - 1)
+        data.HBOut.Size     = Vector2.new(w + 2, boxH + 2)
+        data.HBOut.Color    = color6
+        data.HBOut.Visible  = true
+        data.HBBg.Position  = Vector2.new(hx, boxY)
+        data.HBBg.Size      = Vector2.new(w, boxH)
+        data.HBBg.Visible   = true
+        data.HBFill.Position = Vector2.new(hx, boxY + (boxH - fh))
+        data.HBFill.Size     = Vector2.new(w, fh)
+        if cl ~= data._hpClr then data.HBFill.Color = cl; data._hpClr = cl end
+        data.HBFill.Visible = true
+    else
+        data.HBOut.Visible, data.HBBg.Visible, data.HBFill.Visible = false, false, false
+    end
+
+    if v181.Name then
+        data.Label.Text = name
+        data.Label.Color = isNPC and color4 or v181.NameColor
+        data.Label.Position = Vector2.new(x, boxY - 18)
+        data.Label.Visible = true
+    else data.Label.Visible = false end
+
+    if v181.Distance then
+        if distM ~= data._distM then
+            data._distM = distM
+            data._distStr = format("[%d m]", distM)
+        end
+        data.Dist.Text = data._distStr
+        data.Dist.Position = Vector2.new(x, boxY + boxH + 3)
+        data.Dist.Visible = true
+    else data.Dist.Visible = false end
+
+    if v181.Line then
+        local lc = isNPC and color4 or v181.LineColor
+        local m = string.lower(v181.LineMode)
+        local toPos
+        if m == "top" then toPos = Vector2.new(x, boxY)
+        elseif m == "center" then toPos = Vector2.new(x, boxY + boxH * 0.5)
+        else toPos = Vector2.new(x, boxY + boxH) end
+        data.Line.From = from; data.Line.To = toPos
+        data.Line.Color = lc; data.Line.Thickness = v181.LineThickness
+        data.Line.Visible = true
+        data.HeadDot.Position = toPos; data.HeadDot.Color = lc
+        data.HeadDot.Visible = true
+    else
+        data.Line.Visible, data.HeadDot.Visible = false, false
+    end
+end
+
+local function f57()
+    if not v181.Enabled then f50() return end
+    local cam = workspaceService.CurrentCamera
+    if not cam then return end
+    local vp = cam.ViewportSize
+    local ch = localPlayer.Character
+    local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+    local lpPos = hrp and hrp.Position
+    local maxSq = v181.MaxDistance * v181.MaxDistance
+    local fromVec = f41(vp)
+
+    for plr, d in pairs(v148) do
+        if not players:FindFirstChild(plr.Name) then
+            removePlayer(plr)
+        else
+            local c  = plr.Character
+            local ch2 = c and c:FindFirstChild("HumanoidRootPart")
+            local hm  = c and c:FindFirstChildOfClass("Humanoid")
+            if not ch2 or not hm or hm.Health <= 0 then hideData(d)
+            else renderESP(d, ch2, hm, plr.DisplayName, false, cam, lpPos, maxSq, fromVec) end
+        end
+    end
+    for model, d in pairs(v149) do
+        if not model or not model.Parent then removeModel(model)
+        elseif isPlayerName(model.Name) then removeModel(model)
+        else
+            local hrp2 = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso")
+            local hm2  = model:FindFirstChildOfClass("Humanoid")
+            if not hrp2 or not hm2 or hm2.Health <= 0 then hideData(d)
+            else renderESP(d, hrp2, hm2, model.Name, true, cam, lpPos, maxSq, fromVec) end
+        end
+    end
+end
+
+-- ============================================================
+-- Config
+-- ============================================================
+local v127 = {}
+
+local function register(key, comp, initialVal, stateFn)
+    local o = { Value = initialVal, _comp = comp }
+    function o:Set(val)
+        self.Value = val
+        if stateFn then stateFn(val) end
+        if comp and comp.Set then
+            pcall(function() comp:Set(val) end)
+        end
+    end
+    v127[key] = o
+    return o
+end
+
+local v128 = {
+    Aimbot_Enabled      = false,
+    Aimbot_VisibleCheck = true,
+    Aimbot_ShowFOV      = false,
+    Aimbot_Type         = "Head",
+    Aimbot_FOVColor     = Color3.fromRGB(255,255,255),
+    Aimbot_Smooth       = 1,
+    Aimbot_FOVRadius    = 60,
+    ESP_Name            = false,
+    ESP_Glow            = false,
+    ESP_Box             = false,
+    ESP_Line            = false,
+    ESP_HealthBar       = false,
+    ESP_Distance        = false,
+    ESP_LinePosition    = "Top",
+    ESP_BoxColor        = Color3.fromRGB(255,255,255),
+    ESP_LineColor       = Color3.fromRGB(255,255,255),
+    Menu_Keybind        = Enum.KeyCode.P,
+}
+
+local function serialize(t)
+    local keys = {}
+    for k in pairs(t) do table.insert(keys, k) end
+    table.sort(keys)
+    local out = { "{" }
+    for i, k in ipairs(keys) do
+        local v = t[k]
+        local line
+        if type(v) == "table" then
+            line = string.format('    "%s": { "R": %d, "G": %d, "B": %d }', k, v.R or 0, v.G or 0, v.B or 0)
+        elseif type(v) == "boolean" or type(v) == "number" then
+            line = string.format('    "%s": %s', k, tostring(v))
+        else
+            line = string.format('    "%s": %q', k, tostring(v))
+        end
+        if i < #keys then line = line .. "," end
+        table.insert(out, line)
+    end
+    table.insert(out, "}")
+    return table.concat(out, "\n")
+end
+
+local function applyConfig(t)
+    suppressNotify = true
+    for k, v in pairs(t) do
+        local e = v127[k]
+        if e then
+            local nv = v
+            if k:find("Color") and type(v) == "table" then
+                nv = Color3.fromRGB(v.R or 255, v.G or 255, v.B or 255)
+            elseif k == "Menu_Keybind" and type(v) == "string" then
+                nv = Enum.KeyCode[v]
+            end
+            if nv ~= nil then e:Set(nv) end
+        end
+    end
+    suppressNotify = false
+end
+
+local function saveConfig()
+    local out = {}
+    for k, e in pairs(v127) do
+        if e.Value ~= nil then
+            if k:find("Color") then
+                local c = e.Value
+                out[k] = { R = math.floor(c.R * 255 + 0.5), G = math.floor(c.G * 255 + 0.5), B = math.floor(c.B * 255 + 0.5) }
+            elseif k == "Menu_Keybind" then
+                out[k] = e.Value.Name
+            else
+                out[k] = e.Value
+            end
+        end
+    end
+    local ok, err = pcall(function() writefile(CONFIG_FILE, serialize(out)) end)
+    if ok then
+        Notify({ Title = "Config Saved", Content = "Saved to " .. CONFIG_FILE, Duration = 2 })
+    else
+        Notify({ Title = "Save Failed", Content = tostring(err), Duration = 3 })
+    end
+end
+
+local function resetConfig()
+    applyConfig(v128)
+    pcall(function()
+        if delfile and isfile and isfile(CONFIG_FILE) then delfile(CONFIG_FILE) end
+    end)
+    Notify({ Title = "Config Reset", Content = "All settings restored to default", Duration = 2 })
+end
+
+local function loadConfig()
+    local ok, content = pcall(function() return readfile(CONFIG_FILE) end)
+    if not ok or not content then applyConfig(v128); return end
+    local ok2, decoded = pcall(function() return httpService:JSONDecode(content) end)
+    if not ok2 or type(decoded) ~= "table" then applyConfig(v128); return end
+    applyConfig(decoded)
+end
+
+-- ============================================================
+-- WindUI Window
+-- ============================================================
+local Window = WindUI:CreateWindow({
+    Title    = "[FPS] One Tap",
+    Icon     = "crosshair",
+    Author   = "MoonScript",
+    Folder   = "MoonScript",
+    Size     = UDim2.fromOffset(580, 460),
+    Transparent = true,
+    Theme    = "Dark",
+    SideBarWidth = 180,
+    HasOutline   = true,
+})
+
+pcall(function() Window:SetToggleKey(Enum.KeyCode.P) end)
+
+local informationTab = Window:Tab({ Title = "Information", Icon = "info"     })
+local aimbotTab      = Window:Tab({ Title = "Aimbot",      Icon = "crosshair"})
+local espTab         = Window:Tab({ Title = "Esp",         Icon = "eye"      })
+local settingsTab    = Window:Tab({ Title = "Settings",    Icon = "settings" })
+
+-- ============================================================
+-- Information
+-- ============================================================
+informationTab:Section({ Title = "About" })
+informationTab:Paragraph({
+    Title = "[FPS] One Tap",
+    Desc  = "Made by MoonScript\nPowered by WindUI",
+})
+
+-- ============================================================
+-- Aimbot
+-- ============================================================
+aimbotTab:Section({ Title = "Aimbot Settings" })
+
+local function onAimbotEnable(state)
+    v145.LockEnabled = state
+    if not state and v146 then Unlock() end
+    Notify({ Title = "Aimbot", Content = state and "Menu Activated [OK]" or "Menu Deactivated [X]", Duration = 2 })
+end
+register("Aimbot_Enabled", aimbotTab:Toggle({
+    Title = "Enable Aimbot", Desc = "Master aimbot toggle",
+    Value = false, Callback = onAimbotEnable,
+}), false, onAimbotEnable)
+
+local function onVisibleCheck(state)
+    v145.VisibleCheck = state
+    if v146 and state and not f36(v174) then Unlock() end
+    Notify({ Title = "Visible Check", Content = state and "Menu Activated [OK]" or "Menu Deactivated [X]", Duration = 2 })
+end
+register("Aimbot_VisibleCheck", aimbotTab:Toggle({
+    Title = "Visible Check", Desc = "Only target visible players",
+    Value = true, Callback = onVisibleCheck,
+}), true, onVisibleCheck)
+
+local function onShowFov(state)
+    v145.FOVEnabled = state
+    circle.Visible  = state
+    Notify({ Title = "Show FOV", Content = state and "Menu Activated [OK]" or "Menu Deactivated [X]", Duration = 2 })
+end
+register("Aimbot_ShowFOV", aimbotTab:Toggle({
+    Title = "Show FOV", Desc = "Show the FOV circle",
+    Value = false, Callback = onShowFov,
+}), false, onShowFov)
+
+local function onAimbotPart(val)
+    v145.LockPart = (val == "Head") and "Head" or "HumanoidRootPart"
+    if v146 then Unlock() end
+    Notify({ Title = "Aimbot Part", Content = "Target changed to: " .. val, Duration = 2 })
+end
+register("Aimbot_Type", aimbotTab:Dropdown({
+    Title = "Aimbot Part", Desc = "Select the target part",
+    Values = { "Head", "Body" }, Value = "Head", Callback = onAimbotPart,
+}), "Head", onAimbotPart)
+
+local function onFovColor(col)
+    v145.FOVColor = col
+    if not v146 then circle.Color = col end
+end
+register("Aimbot_FOVColor", aimbotTab:Colorpicker({
+    Title = "FOV Color", Desc = "Set FOV circle color",
+    Default = Color3.fromRGB(255,255,255), Callback = onFovColor,
+}), Color3.fromRGB(255,255,255), onFovColor)
+
+local function onSmooth(v) v145.SmoothLevel = v end
+register("Aimbot_Smooth", aimbotTab:Slider({
+    Title = "Smooth Aimbot",
+    Desc  = "1 = Snap, 2 = Smooth, 3 = Very Smooth",
+    Value = { Min = 1, Max = 3, Default = 1 }, Step = 1,
+    Callback = onSmooth,
+}), 1, onSmooth)
+
+local function onFovRadius(v) v145.FOVRadius = v; circle.Radius = v end
+register("Aimbot_FOVRadius", aimbotTab:Slider({
+    Title = "FOV Radius", Desc = "Set FOV circle radius",
+    Value = { Min = 20, Max = 360, Default = 50 }, Step = 5,
+    Callback = onFovRadius,
+}), 50, onFovRadius)
+
+-- ============================================================
+-- ESP
+-- ============================================================
+espTab:Section({ Title = "ESP Settings" })
+
+local function onEspEnable(state)
+    v181.Enabled = state
+    if not state then f50() end
+    Notify({ Title = "ESP", Content = state and "ESP Activated [OK]" or "ESP Deactivated [X]", Duration = 2 })
+end
+register("ESP_Glow", espTab:Toggle({
+    Title = "ESP Enable", Desc = "Master ESP toggle",
+    Value = false, Callback = onEspEnable,
+}), false, onEspEnable)
+
+local function onEspName(state)
+    v181.Name = state
+    if not state then
+        for _, d in pairs(v148) do if d.Label then d.Label.Visible = false end end
+        for _, d in pairs(v149) do if d.Label then d.Label.Visible = false end end
+    end
+    Notify({ Title = "ESP Name", Content = state and "Menu Activated [OK]" or "Menu Deactivated [X]", Duration = 2 })
+end
+register("ESP_Name", espTab:Toggle({
+    Title = "ESP Name", Desc = "Show player names",
+    Value = false, Callback = onEspName,
+}), false, onEspName)
+
+local function onEspBox(state)
+    v181.Box = state
+    if not state then
+        for _, d in pairs(v148) do if d.Box then d.Box.Visible = false end end
+        for _, d in pairs(v149) do if d.Box then d.Box.Visible = false end end
+    end
+    Notify({ Title = "ESP Box", Content = state and "Menu Activated [OK]" or "Menu Deactivated [X]", Duration = 2 })
+end
+register("ESP_Box", espTab:Toggle({
+    Title = "ESP Box", Desc = "Show 2D boxes",
+    Value = false, Callback = onEspBox,
+}), false, onEspBox)
+
+local function onEspLine(state)
+    v181.Line = state
+    if not state then
+        for _, d in pairs(v148) do
+            if d.Line then d.Line.Visible = false end
+            if d.HeadDot then d.HeadDot.Visible = false end
+        end
+        for _, d in pairs(v149) do
+            if d.Line then d.Line.Visible = false end
+            if d.HeadDot then d.HeadDot.Visible = false end
+        end
+    end
+    Notify({ Title = "ESP Tracer", Content = state and "Menu Activated [OK]" or "Menu Deactivated [X]", Duration = 2 })
+end
+register("ESP_Line", espTab:Toggle({
+    Title = "ESP Tracer", Desc = "Show tracer lines",
+    Value = false, Callback = onEspLine,
+}), false, onEspLine)
+
+local function onEspHealth(state)
+    v181.HealthBar = state
+    if not state then
+        for _, d in pairs(v148) do
+            d.HBOut.Visible, d.HBBg.Visible, d.HBFill.Visible = false, false, false
+        end
+        for _, d in pairs(v149) do
+            d.HBOut.Visible, d.HBBg.Visible, d.HBFill.Visible = false, false, false
+        end
+    end
+    Notify({ Title = "ESP Health", Content = state and "Menu Activated [OK]" or "Menu Deactivated [X]", Duration = 2 })
+end
+register("ESP_HealthBar", espTab:Toggle({
+    Title = "ESP Health", Desc = "Show health bars",
+    Value = true, Callback = onEspHealth,
+}), true, onEspHealth)
+
+local function onEspDistance(state)
+    v181.Distance = state
+    if not state then
+        for _, d in pairs(v148) do if d.Dist then d.Dist.Visible = false end end
+        for _, d in pairs(v149) do if d.Dist then d.Dist.Visible = false end end
+    end
+    Notify({ Title = "ESP Distance", Content = state and "Menu Activated [OK]" or "Menu Deactivated [X]", Duration = 2 })
+end
+register("ESP_Distance", espTab:Toggle({
+    Title = "ESP Distance", Desc = "Show distance",
+    Value = true, Callback = onEspDistance,
+}), true, onEspDistance)
+
+espTab:Divider()
+
+local function onLinePos(val) v181.LineMode = val end
+register("ESP_LinePosition", espTab:Dropdown({
+    Title = "Tracer Origin", Desc = "Set tracer line origin",
+    Values = { "Top", "Center", "Bottom" }, Value = "Top",
+    Callback = onLinePos,
+}), "Top", onLinePos)
+
+local function onBoxColor(col)
+    v181.BoxColor = col
+    for _, d in pairs(v148) do if d.Box then d.Box.Color = col end end
+end
+register("ESP_BoxColor", espTab:Colorpicker({
+    Title = "Box Color", Desc = "ESP box color (players)",
+    Default = Color3.fromRGB(255,255,255), Callback = onBoxColor,
+}), Color3.fromRGB(255,255,255), onBoxColor)
+
+local function onLineColor(col)
+    v181.LineColor = col
+    for _, d in pairs(v148) do
+        if d.Line then d.Line.Color = col end
+        if d.HeadDot then d.HeadDot.Color = col end
+    end
+end
+register("ESP_LineColor", espTab:Colorpicker({
+    Title = "Tracer Color", Desc = "Tracer line color (players)",
+    Default = Color3.fromRGB(255,255,255), Callback = onLineColor,
+}), Color3.fromRGB(255,255,255), onLineColor)
+
+-- ============================================================
+-- Settings
+-- ============================================================
+settingsTab:Section({ Title = "Configuration" })
+settingsTab:Paragraph({
+    Title = "Config",
+    Desc  = "Save or reset your settings.\nAlso configure the menu keybind.",
+})
+
+settingsTab:Divider()
+
+local function onKeybind(key)
+    pcall(function() Window:SetToggleKey(key) end)
+    Notify({ Title = "Keybind", Content = "Menu keybind changed to: " .. key.Name, Duration = 2 })
+end
+register("Menu_Keybind", settingsTab:Keybind({
+    Title = "Toggle Menu", Desc = "Click then press new key",
+    Value = Enum.KeyCode.P, Callback = onKeybind,
+}), Enum.KeyCode.P, onKeybind)
+
+settingsTab:Divider()
+
+settingsTab:Button({
+    Title = "Save Config",
+    Desc  = "Save current settings to file",
+    Callback = function() saveConfig() end,
+})
+
+settingsTab:Button({
+    Title = "Reset Config",
+    Desc  = "Restore all settings to default",
+    Callback = function()
+        WindUI:Dialog({
+            Title   = "Reset Config?",
+            Content = "All settings will be restored to their default values. This cannot be undone.",
+            Icon    = "alert-triangle",
+            Buttons = {
+                { Title = "No",  Variant = "Secondary", Callback = function() end },
+                { Title = "Yes", Variant = "Primary",   Callback = function() resetConfig() end },
+            },
+        })
+    end,
+})
+
+-- ============================================================
+-- Render loop
+-- ============================================================
+local smoothFactors = { 0.3, 0.15, 0.06 }
+
+runService.RenderStepped:Connect(function()
+    currentCamera = workspaceService.CurrentCamera
+    if not currentCamera then return end
+
+    -- FOV circle
+    if v145.FOVEnabled then
+        circle.Position = Vector2.new(currentCamera.ViewportSize.X / 2, currentCamera.ViewportSize.Y / 2)
+        circle.Radius   = v145.FOVRadius
+        circle.Color    = v146 and v145.FOVActiveColor or v145.FOVColor
+        circle.Visible  = true
+    else
+        circle.Visible = false
+    end
+
+    -- ESP
+    f57()
+
+    -- Aimbot
+    if not v145.LockEnabled then
+        if v146 then Unlock() end
+        return
+    end
+    if not v146 then
+        local t = f37()
+        if t then f38(t) end
+        return
+    end
+    if not f31(v174) then Unlock() return end
+
+    local tgt = f29(v174)
+    if not tgt then Unlock() return end
+    if f33(v174) > v145.MaxDistance then Unlock() return end
+
+    if v176 ~= v174 then
+        v176 = v174
+        v175 = f32(v174)
+    end
+
+    v147 = v147 + 1
+    if v147 >= 3 then
+        v147 = 0
+        if not f34(tgt, v175) then
+            Unlock()
+            local newT = f37()
+            if newT then f38(newT) else circle.Color = v145.FOVColor end
+            return
+        end
+    end
+
+    local camPos  = currentCamera.CFrame.Position
+    local look    = currentCamera.CFrame.LookVector
+    local targetD = (tgt.CFrame.Position - camPos).Unit
+    local newLook = look:Lerp(targetD, smoothFactors[v145.SmoothLevel] or 0.15)
+    currentCamera.CFrame = CFrame.new(camPos, camPos + newLook)
+end)
+
+-- ============================================================
+-- Init
+-- ============================================================
+loadConfig()
+
+return {
+    Window = Window,
+    WindUI = WindUI,
+}
